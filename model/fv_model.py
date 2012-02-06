@@ -1,3 +1,4 @@
+from ipdb import set_trace
 import numpy as np
 from numpy import abs, dot, hstack, mean, newaxis, sign, sum, sqrt, std, zeros
 
@@ -68,6 +69,7 @@ class FVModel(BaseModel):
         train_paths, test_paths = self._get_statistics_paths(dataset, prefix)
         for fn_train, fn_test in zip(train_paths, test_paths):
             # Process train set.
+            set_trace()
             ss = np.fromfile(fn_train, dtype=np.float32)
             xx = _compute_features(ss, self.gmm)
             xx, mu, sigma = self._standardize(xx)

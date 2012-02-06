@@ -18,8 +18,8 @@ class BaseModel(object):
 
     def fit(self, dataset, evaluation):
         self.compute_kernels(dataset)
-        self.cx = dataset.get_labels('train')
-        self.cy = dataset.get_labels('test')
+        self.cx = dataset.get_data('train')[1]
+        self.cy = dataset.get_data('test')[1]
         self.evaluation = evaluation
         self.evaluation.fit(self.Kxx, self.cx)
 
@@ -36,8 +36,8 @@ class BaseModel(object):
         pass
 
     def _init_kernels(self, dataset):
-        self.Nx = len(dataset.get_unique_samples('train'))
-        self.Ny = len(dataset.get_unique_samples('test'))
+        self.Nx = len(dataset.get_data('train')[0])
+        self.Ny = len(dataset.get_data('test')[0])
         self.Kxx = zeros((self.Nx, self.Nx))
         self.Kyx = zeros((self.Ny, self.Nx))
         self.gmm = self._get_gmm(dataset)

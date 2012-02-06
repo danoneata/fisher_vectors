@@ -42,7 +42,7 @@ class SFVModel(BaseModel):
         self.S = np.array([1. / 12, 1. / 12, 1. / 12])
 
     def __str__(self):
-        ss = super(FVSFVModel, self).__str__()
+        ss = super(SFVModel, self).__str__()
         return 'FV-SFV ' + ss
 
     def _compute_spatial_statistics(self, xx, ll, gmm):
@@ -114,7 +114,7 @@ class SFVModel(BaseModel):
             - Q_ll_2
             - (Q_sum[:, newaxis] * mm ** 2).reshape(N, 3 * K, order='F')
             + (Q_sum[:, newaxis] * S).reshape(N, 3 * K, order='F')
-            + 2 * Q_ll * tile(squeeze(mm)[newaxis], 50))
+            + 2 * Q_ll * tile(squeeze(mm)[newaxis], K))
         xx = hstack((d_mm, d_S))
         return xx
 
