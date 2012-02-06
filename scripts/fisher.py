@@ -31,8 +31,8 @@ def do(task, src_cfg, ip_type, model_type, K, grid, Ncpus, verbose):
             evn = 'svm_one_vs_one'
         evaluation = Evaluation(evn)
         model.fit(dataset, evaluation)
-        with open(os.path.join(ROOT_PATH, dataset.Dataset, 'results', RESULTS_FN), 'a') as ff:
-            ff.write(str(model) + ' ' + model.score)
+        with open(os.path.join(ROOT_PATH, dataset.DATASET, 'results', RESULTS_FN), 'a') as ff:
+            ff.write('%s %2.3f\n' % (str(model), 100 * model.score()))
     else:
         raise Exception("Option type is not defined.")
         usage()
