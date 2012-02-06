@@ -2,6 +2,7 @@ from __future__ import division
 from collections import defaultdict
 from itertools import product
 import os
+import sys
 
 import cPickle as cp
 import numpy as np
@@ -201,11 +202,15 @@ class DescriptorProcessor:
     def merge_statistics(self):
         self._merge_tmp_statistics('train')
         self._merge_tmp_statistics('test')
-        self._merge_tmp_statistics('train', 'spatial_')
-        self._merge_tmp_statistics('test', 'spatial_')
+        if self.model.is_spatial_model:
+            self._merge_tmp_statistics('train', 'spatial_')
+            self._merge_tmp_statistics('test', 'spatial_')
 
     def remove_statistics(self):
-        self._remove_tmp_statistics()  # Make this robust... Doesn't work for spatial thingy.
+        self._remove_tmp_statistics()
+        if self.model.is_spatial_model:
+            self._remove_tmp_statistics('spatial_') 
+        os.rmdir(self.temp_path)
 
     def compute_statistics_worker(self, samples, grid, pca, gmm):
         """ Worker function for computing the sufficient statistics. It takes
@@ -290,14 +295,16 @@ class DescriptorProcessor:
     def _merge_tmp_statistics(self, data_type, prefix=''):
         """ Data type can be either 'train' or 'test'. """
         nr_bins = prod(self.grid)
-        fn_first = '_'.join(self.bare_fn.split('_')[:-1])
+        # File format is <name>_<train/test>_<g0>_<g1>_<g2>_<ii>.
+
+        # Clamp the first 5 parameters. Let free only the index of bin number.
+        fn_first = '_'.join(self.bare_fn.split('_')[:-1]) 
         fn_last = self.bare_fn.split('_')[-1]
         name = (fn_first % (prefix + data_type, self.grid[0], self.grid[1], self.grid[2]) + '_' + fn_last)
-        samples, labels = self.dataset.get_data(data_type)
-        fn_stats = os.path.join(self.root_path, name)
-        files_written = 0
+        fn_stats = os.path.join(self.root_path, name) # Filename of big file.
+
+        # Iterate over cells/bins combinations.
         for ii in xrange(nr_bins):
-            # If file already exists, chicken out.
             try:
                 ff = open(fn_stats % ii);
                 print 'File %s already exists. Chickening out.' % fn_stats % ii
@@ -305,26 +312,40 @@ class DescriptorProcessor:
                 return False
             except IOError:
                 pass
-            ff_stats = open(fn_stats % ii, 'a')
-            for sample in self.dataset.get_unique_samples(data_type):
+            ff_stats = open(fn_stats % ii, 'w') # Big file containing statistics. 
+            for sample in self.dataset.get_data(data_type)[0]:
                 fn = os.path.join(
-                    self.temp_path, self.spatial_bare_fn % (sample, self.grid[0], self.grid[1], self.grid[2], ii))
+                    self.temp_path, prefix + self.bare_fn % (sample, self.grid[0], self.grid[1], self.grid[2], ii))  # Small file filename
                 try:
                     with open(fn) as ff:
-                        files_written += 1
                         ss = np.fromfile(ff, dtype=np.float32)
-                        if not self.model.is_spatial_model:
+                        # Check everything is fine as size.
+                        if prefix == '':
                             assert len(ss) == self.K + 2 * self.K * self.nr_pca_comps
-                        else:
+                        elif prefix == 'spatial_':
                             assert len(ss) == self.K + 2 * self.K * 3
+                        else:
+                            print 'Unrecognized prefix.\n Exiting...'
+                            sys.exit(1)
+                        # Write to the big file.
                         ss.tofile(ff_stats)
                 except IOError:
-                    print 'File %s does not exist' % fn
+                    print 'File %s does not exist.' % fn
+                    print 'Removing big file containing statistics %s' % fn_stats % ii
                     ff_stats.close()
                     os.remove(fn_stats % ii)
+                    print 'Exiting...'
+                    sys.exit(1)
+                except AssertionError:
+                    print 'Size mistmatch for file %s' % fn
+                    print 'Removing big file containing statistics %s' % fn_stats % ii
+                    ff_stats.close()
+                    os.remove(fn_stats % ii)
+                    print 'Exiting...'
+                    sys.exit(1)
             ff_stats.close()
 
-    def _remove_tmp_statistics(self):
+    def _remove_tmp_statistics(self, prefix=''):
         samples = list(set(
             self.dataset.get_data('train')[0] +
             self.dataset.get_data('test')[0]))
@@ -332,15 +353,12 @@ class DescriptorProcessor:
         for sample in samples:
             for ii in xrange(nr_bins):
                 fn = os.path.join(
-                    self.temp_path, self.bare_fn %
+                    self.temp_path, prefix + self.bare_fn %
                     (sample, self.grid[0], self.grid[1], self.grid[2], ii))
                 try:
                     os.remove(fn)
                 except OSError:
-                    # TODO Tidy this!
-                    print 'Cannot remove %s' % fn
-                    print OSError.message
-        os.rmdir(self.temp_path)
+                    pass
 
     def _exist_descriptors(self):
         samples = (self.dataset.get_data('train')[0] +
