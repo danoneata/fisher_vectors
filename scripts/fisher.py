@@ -4,6 +4,7 @@ import getopt
 import os
 import sys 
 import multiprocessing as mp
+from ipdb import set_trace
 
 from dataset import Dataset
 from fisher_vectors.features import DescriptorProcessor
@@ -121,7 +122,7 @@ def main():
             grid = [(int(gx), int(gy), int(gt))]
         elif opt in ("-n", "--ncpus"):
             Ncpus = min(max(int(arg),1), Ncpus)
-    do(task, src_cfg, ip_type, model_type, K, grid, verbose, Ncpus)
+    do(task, src_cfg, ip_type, model_type, K, grid, Ncpus, verbose)
     
 if __name__ == '__main__':
     main()
