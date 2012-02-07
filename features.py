@@ -179,7 +179,7 @@ class DescriptorProcessor:
 
         pca = self.load_pca()
         gmm = self.load_gmm()
-
+        # Insert here a for grid in self.model.grids: 
         if nr_processes > 1:
             import multiprocessing as mp
             processes = []
@@ -243,6 +243,7 @@ class DescriptorProcessor:
                     except IOError:
                         with open(fn, 'w') as ff:
                             try:
+                                set_trace()
                                 ss = self.model._compute_statistics(
                                     vstack(bag_xx[bin]), gmm)
                             except ValueError:
@@ -275,8 +276,8 @@ class DescriptorProcessor:
         W, H = dimensions
         t_init, t_final = duration
         # Create equally spaced bins.
-        bins_x = linspace(1, W, grid[0] + 1)
-        bins_y = linspace(1, H, grid[1] + 1)
+        bins_x = linspace(0, W + 1, grid[0] + 1)
+        bins_y = linspace(0, H + 1, grid[1] + 1)
         bins_t = linspace(t_init, t_final + 1, grid[2] + 1)
         bag_xx = defaultdict(list)
         bag_ll = defaultdict(list)
@@ -390,7 +391,7 @@ class DescriptorProcessor:
     def _compute_subsample_descriptors(self, nr_samples):
         """ Gets a subsample of the the descriptors and it is saved to the
         subset.siftgeo file. """
-        bash_cmd = ('/home/clear/oneata/scripts/bash_functions/' +
+        bash_cmd = ('/home/clear/oneata/scripts2/bash_functions/' +
                     'run_subsample.sh %s %s %s' %
                     (self.dataset.DATASET, self.dataset.FTYPE,
                      str(nr_samples)))
