@@ -44,8 +44,8 @@ def do(task, src_cfg, ip_type, model_type, K, grids, Ncpus, verbose):
 
 def usage():
     prog_name = os.path.basename(sys.argv[0])
-    print ('Usage: %s opt_type -d dataset -i ip_type -m model -k K ' +
-           '[-g grids] [-n ncpus]' % prog_name)
+    print 'Usage: %s opt_type -d dataset -i ip_type -m model \\' % prog_name
+    print '       -k K [-g grids] [-n ncpus]'
     print
     print 'Launches different tasks for a given dataset and model.'
     print
@@ -106,8 +106,17 @@ def usage():
 
 
 def main():
+    if len(sys.argv) == 1:
+        print usage()
+        sys.exit(1)
+
     try:
         task = sys.argv[1]
+        if task not in ('compute', 'merge', 'remove', 'evaluate'):
+            print 'Unknown option.'
+            usage()
+            sys.exit(1)
+
         opt_pairs, _args = getopt.getopt(
             sys.argv[2:], "hvd:i:m:k:g:n:",
             ["help", "verbose", "dataset=", "ip_type=",
@@ -120,6 +129,7 @@ def main():
         print 'Not enough arguments.'
         usage()
         sys.exit(1)
+
     verbose = False
     Ncpus = mp.cpu_count()
     grids = [(1, 1, 1)]
