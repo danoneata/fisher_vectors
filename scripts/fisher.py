@@ -98,10 +98,10 @@ def usage():
     print
     print '     Examples:'
     print '     ---------'
-    print '         fisher compute --dataset=kth --ip_type=harris.hoghof \\'
+    print '         fisher compute --dataset=kth --ip_type=harris.hoghof\\'
     print '         --model=fv --K=50 --ncpus=3'
     print
-    print '         fisher evaluate -d kth -ip_type dense5.track15mbh \\'
+    print '         fisher evaluate -d hollywood2_clean -i dense5.track15mbh\\'
     print '         -m fv_sfv -k 100 -g 1_1_1-1_3_1-1_1_2'
 
 
