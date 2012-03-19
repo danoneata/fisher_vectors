@@ -152,8 +152,7 @@ def main():
             grids = []
             for _g in gg:
                 gx, gy, gt = _g.split('_')
-                grids.append[(int(gx), int(gy), int(gt))]
-            # TODO Check everything is fine at this parsing of arguments.
+                grids.append((int(gx), int(gy), int(gt)))
         elif opt in ("-n", "--ncpus"):
             Ncpus = min(max(int(arg), 1), Ncpus)
     do(task, src_cfg, ip_type, model_type, K, grids, Ncpus, verbose)
