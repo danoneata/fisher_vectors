@@ -4,6 +4,7 @@ import pytest
 import numpy as np
 import numpy.testing 
 import subprocess
+import time
 
 from dataset import Dataset
 from fisher_vectors.features import DescriptorProcessor
@@ -69,10 +70,14 @@ def test_compute_statistics_from_video():
     new_dense_tracks = '/home/lear/oneata/tmp/dense_trajectory/release64/FeatTrack'
     infile = os.path.join( dataset.SRC_DIR, sample.movie + dataset.SRC_EXT)
     outfile = siftgeo_fn
-    subprocess.Popen([new_dense_tracks, infile, outfile, '15',
+
+    start_timer = time.time()
+    subprocess.Popen([adrien_dense_tracks, infile, outfile, '15',
                       '5', str(sample.bf), str(sample.ef), 'mbh']).wait()
     # Computing the sufficient statistics for the case (i).
     dp.compute_statistics_worker([sample], (1, 1, 1), pca, gmm)
+    print 'Classic method: %s s' % str(time.time() - start_timer)
+
     fn = os.path.join(dataset.FEAT_DIR, 'statistics_k_%d' % K, 'stats.tmp',
                       sample + '_1_1_1_0.dat')
     desc_1 = np.fromfile(fn, dtype=np.float32)
@@ -80,8 +85,11 @@ def test_compute_statistics_from_video():
     # Move sufficient statistics. 
     subprocess.Popen(['mv', fn, fn + '.old']).wait()
 
+    start_timer = time.time()
     # Computing the sufficient statistics for the case (ii).
     dp.compute_statistics_from_video_worker([sample], (1, 1, 1), pca, gmm, 0, 0)
+    print 'New method: %s s' % str(time.time() - start_timer)
+
     #ipdb.set_trace()
     desc_2 = np.fromfile(fn, dtype=np.float32)
 
@@ -89,9 +97,8 @@ def test_compute_statistics_from_video():
     subprocess.Popen(['rm', '-f', fn, fn + '.old']).wait()
     if file_moved:
         # Revert.
-        #subprocess.Popen(['rm', '-f', siftgeo_fn]).wait()
-        #subprocess.Popen(['mv', siftgeo_fn + '.old', siftgeo_fn]).wait()
-        pass
+        subprocess.Popen(['rm', '-f', siftgeo_fn]).wait()
+        subprocess.Popen(['mv', siftgeo_fn + '.old', siftgeo_fn]).wait()
 
     print desc_1
     print desc_2
