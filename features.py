@@ -2,6 +2,7 @@ from __future__ import division
 from collections import defaultdict
 from itertools import product
 import os
+import subprocess
 import sys
 
 import cPickle as cp
@@ -70,6 +71,17 @@ class DescriptorProcessor:
         self.K = self.model.K
         self.grid = self.model.grids[0]
         self.NR_CPUS = count_cpu()
+
+        # The length of a descriptor.
+        desc_type = dataset.FTYPE.split('.')[-1]
+        if 'mbh' in desc_type:
+            self.LEN_DESC = 192
+        elif 'hoghof' in desc_type:
+            self.LEN_DESC = 96 + 108
+        elif 'all' in desc_type:
+            self.LEN_DESC = 96 + 108 + 192
+        else:
+            raise Exception('Unknown descriptor type.')
         # Set filenames that will be used later on.
         self.nr_pca_comps = 64
         self.nr_samples = 2e5
@@ -129,12 +141,13 @@ class DescriptorProcessor:
         """ Computes GMM using yael functions. """
         if nr_threads is None:
             nr_threads = self.NR_CPUS
-        descriptors = self._load_subsample_descriptors(nr_samples)
+        descriptors = self._load_subsample_descriptors()
+        print len(descriptors)
         if pca:
             descriptors = pca.transform(descriptors)
         N, D = descriptors.shape
         gmm = gmm_learn(D, N, self.K, nr_iter, numpy_to_fvec_ref(descriptors),
-                        nr_threads, seed, GMM_FLAGS_W)
+                        nr_threads, seed, nr_redo, GMM_FLAGS_W)
         return gmm
 
     def save_gmm(self, gmm):
@@ -186,7 +199,7 @@ class DescriptorProcessor:
             nr_samples_per_process = len(samples) // nr_processes + 1
             for ii in xrange(nr_processes):
                 process = mp.Process(
-                    target=self.compute_statistics_worker,
+                    target=self.compute_statistics_from_video_worker,
                     args=(samples[ii * nr_samples_per_process :
                                   (ii + 1) * nr_samples_per_process],
                           self.grid, pca, gmm))
@@ -211,6 +224,90 @@ class DescriptorProcessor:
         if self.model.is_spatial_model:
             self._remove_tmp_statistics('spatial_') 
         os.rmdir(self.temp_path)
+
+    def compute_statistics_from_video_worker(self, samples, grid, pca, gmm,
+                                             delta=120, spacing=4):
+        """ Computes the Fisher vector directly from the video in an online
+        fashion. The chain of actions is the following: compute descriptors one
+        by one, get a descriptor and apply PCA to it, then compute the
+        posterior probabilities and update the Fisher vector.  
+        
+        """
+        FLOAT_SIZE = 4  # 4 bytes per float.
+        D = gmm.d
+        # Do not store the descriptor.
+        outfile = '0'
+        for sample in samples:
+            # sample = SampID(sample)  # No need for this.
+            infile = os.path.join(
+                self.dataset.SRC_DIR,
+                sample.movie + self.dataset.SRC_EXT)
+
+            fn = os.path.join(
+                self.temp_path, 
+                self.bare_fn % (sample, grid[0], grid[1], grid[2], 0))
+
+            try:  # TODO Maybe use with?
+                ff = open(fn, 'r')
+                ff.close()
+                continue 
+            except IOError:
+                ff = open(fn, 'w')
+            
+                if spacing == 0:
+                    begin_frames = [sample.bf]
+                    end_frames = [sample.ef]
+                else:
+                    begin_frames = range(sample.bf, sample.ef - delta, delta * spacing)
+                    end_frames = range(sample.bf + delta, sample.ef, delta * spacing)
+                str_begin_frames = '_'.join(map(str, begin_frames))
+                str_end_frames = '_'.join(map(str, end_frames))
+                # TODO Do not preset mbh, 15, 5, but compute those from ip_type.
+                # Extract descriptors and pipe them to this script.
+                dense_tracks = subprocess.Popen(
+                    ['densetracks', infile, outfile, '15',
+                     '5', str_begin_frames, str_end_frames, 'mbh'],
+                    stdout=subprocess.PIPE, bufsize=1)
+
+                # Fisher vector computation.
+                # TODO For spatial pyramids allocate more fv.
+                fv = np.zeros(self.K + 2 * self.K * D, dtype=np.float32)
+                N = 0
+                while True:
+                    # Read one descriptor: position + descriptors' values.
+                    str_desc = dense_tracks.stdout.read(
+                        FLOAT_SIZE * (3 + self.LEN_DESC))
+                    if not str_desc:
+                        break
+                    position_desc = np.fromstring(str_desc, dtype=np.float32)
+                    position = position_desc[:3]
+                    # TODO Assert that positions are in range.
+                    desc = position_desc[3:]
+                    assert len(desc) == self.LEN_DESC
+                    # TODO Select here the right cell.
+
+                    # Apply PCA to the descriptor.
+                    xx = pca.transform(desc)
+
+                    # Compute posterior probabilities.
+                    Q_yael = fvec_new(self.K)
+                    gmm_compute_p(1, numpy_to_fvec_ref(xx), gmm, Q_yael, GMM_FLAGS_W)
+                    Q = fvec_to_numpy(Q_yael, self.K)
+                    yael.free(Q_yael)
+
+                    # Compute statistics.
+                    Q_xx = (Q[np.newaxis].T * xx).flatten()         # 1xKD
+                    Q_xx_2 = (Q[np.newaxis].T * xx ** 2).flatten()  # 1xKD
+
+                    # Update the sufficient statistics for this sample.
+                    fv += np.array(hstack((Q, Q_xx, Q_xx_2)))
+                    N += 1
+
+                # Save Fisher vector.
+                # TODO Save all fv's.
+                fv /= N
+                fv.tofile(ff)
+                ff.close()
 
     def compute_statistics_worker(self, samples, grid, pca, gmm):
         """ Worker function for computing the sufficient statistics. It takes
@@ -243,7 +340,6 @@ class DescriptorProcessor:
                     except IOError:
                         with open(fn, 'w') as ff:
                             try:
-                                set_trace()
                                 ss = self.model._compute_statistics(
                                     vstack(bag_xx[bin]), gmm)
                             except ValueError:
@@ -281,8 +377,10 @@ class DescriptorProcessor:
         bins_t = linspace(t_init, t_final + 1, grid[2] + 1)
         bag_xx = defaultdict(list)
         bag_ll = defaultdict(list)
+        N = 0
         for ss in siftgeo:
             xx = pca.transform(ss[1])
+            N += 1
             id_x = digitize([ss[0]['x']], bins_x)
             id_y = digitize([ss[0]['y']], bins_y)
             id_t = digitize([ss[0]['t']], bins_t)
@@ -390,7 +488,9 @@ class DescriptorProcessor:
 
     def _compute_subsample_descriptors(self, nr_samples):
         """ Gets a subsample of the the descriptors and it is saved to the
-        subset.siftgeo file. """
+        subset.siftgeo file. 
+        
+        """
         bash_cmd = ('/home/clear/oneata/scripts2/bash_functions/' +
                     'run_subsample.sh %s %s %s' %
                     (self.dataset.DATASET, self.dataset.FTYPE,
@@ -399,7 +499,9 @@ class DescriptorProcessor:
 
     def _load_subsample_descriptors(self):
         """ Returns a NxD dimensional matrix representing a subsample of the
-        descriptors. """
+        descriptors. 
+        
+        """
         with open(self.fn_subsample, 'r'):
             pass
         siftgeos = read_video_points_from_siftgeo(self.fn_subsample)
@@ -409,3 +511,12 @@ class DescriptorProcessor:
         for ii, siftgeo in enumerate(siftgeos):
             descriptors[ii] = siftgeo[1]
         return descriptors
+
+    def _get_begin_end_frames(start, end, delta=120, spacing=4):
+        """ Returns the begining and end frames for chunking the video into 
+        pieces of delta frames that are equally spaced.
+
+        """
+        begin_frames = range(start, end - delta, delta * spacing)
+        end_frames = range(start + delta, end, delta * spacing)
+        return begin_frames, end_frames
