@@ -2,6 +2,7 @@ from __future__ import division
 from collections import defaultdict
 from itertools import product
 import os
+import re
 import subprocess
 import sys
 
@@ -21,6 +22,92 @@ from yael.yael import GMM_FLAGS_W
 from yael import yael
 
 verbose = True  # Global variable used for printing messages.
+
+# Defining some constants, for readability.
+FLOAT_SIZE = 4
+DESCS_LEN = {
+    'mbh': 192,
+    'hog': 96,
+    'hof': 108,
+    'hoghof': 96 + 108,
+    'all': 96 + 108 + 192}
+
+
+def parse_ip_type(ip_type):
+    """ Splits an ip_type string into arguments that are passable to Heng's
+    densetracks code. We follow the convention defined by Adrien. Some examples
+    of ip_type: 'dense5.track15hoghof', 'dense5.track20mbh'.
+
+    Note: At the moment, I assume we are using only dense trajectories.
+
+    """
+    try:
+        detector, descriptor = ip_type.split('.')
+    except ValueError:
+        print 'Incorect format of ip_type.'
+        sys.exit()
+
+    assert detector.startswith('dense') and descriptor.startswith('track'), \
+            'Accepts only dense trajectories at the moment.'
+
+    pattern_stride = re.compile('dense(\d+)')
+    pattern_track_length = re.compile('track(\d+)\w+')
+    pattern_desc_type = re.compile('track\d+(\w+)')
+
+    stride = re.findall(pattern_stride, detector)[0]
+    track_length = re.findall(pattern_track_length, descriptor)[0]
+    descriptor_type = re.findall(pattern_desc_type, descriptor)[0]
+     
+    return stride, track_length, descriptor_type
+
+
+def read_descriptors_from_video(infile, nr_descriptors, **kwargs):
+    """ Lazy function generator to grab chunks of descriptors from Heng's dense
+    trajectories stdout. The code assumes that 'densetracks' outputs 3 numbers
+    corresponding to the descriptor position, followed by the descriptor's
+    values. Each outputed number is assumed to be a float.
+    
+    Parameters
+    ----------
+    infile: string, required
+        The path to the video file.
+
+    nr_descriptors: int, required
+        Number of descriptors to be returned.
+
+    ip_type: string, optional, default 'dense5.track15mbh'
+        The type of descriptors to be returned.
+
+    begin_frames: list, optional, default [0]
+        The indices of the beginning frames. 
+
+    end_frames: list, optional, default [1e6]
+        The indices of the end frames.
+
+    """
+    # Get keyword arguments.
+    ip_type = kwargs.get('ip_type', 'dense5.track15mbh')
+    begin_frames = kwargs.get('begin_frames', [0])
+    end_frames = kwargs.get('end_frames', [1e6])
+
+    # Prepare arguments for Heng's code.
+    stride, track_length, descriptor_type = parse_ip_type(ip_type)
+    str_begin_frames = '_'.join(map(str, begin_frames))
+    str_end_frames = '_'.join(map(str, end_frames))
+
+    descriptor_length = DESCS_LEN[descriptor_type]
+    position_length = 3
+
+    dense_tracks = subprocess.Popen(
+        ['densetracks', infile, '0', track_length, stride,
+         str_begin_frames, str_end_frames, descriptor_type],
+        stdout=subprocess.PIPE, bufsize=1)
+    while True:
+        data = dense_tracks.stdout.read(
+            FLOAT_SIZE * (descriptor_length + position_length))
+        if not data:
+            break
+        yield data
 
 
 class DescriptorProcessor:
