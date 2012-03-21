@@ -41,6 +41,7 @@ class FVModel(BaseModel):
         then easily compute the Fisher vectors or a soft bag-of-words histogram
 
         """
+        xx = np.atleast_2d(xx)
         N = xx.shape[0]
         # Compute posterior probabilities using yael.
         Q_yael = fvec_new(N * self.K)
