@@ -24,9 +24,9 @@ class SVMOneVsOne(BaseEvaluation):
             #weight = 1 * ones(N)
             #weight[yy == 1] *= N / nr_pos
             weight = 0.01 * ones(N)
-            weight[yy == 1] *= 100 
+            weight[yy == 1] *= 100
             self.clf[ii].C = C
-            self.clf[ii].fit(Kxx, yy, sample_weight=weight) 
+            self.clf[ii].fit(Kxx, yy, sample_weight=weight)
 
     def score(self, Kyx, cy):
         average_precision = zeros(self.nr_classes)
@@ -73,7 +73,7 @@ class SVMOneVsOne(BaseEvaluation):
         cc = array(cc)
         cv_cc = cc[cv_idxs]
         tr_cc = cc[tr_idxs]
-        # 2. Try different values for the regularization term C and pick the 
+        # 2. Try different values for the regularization term C and pick the
         # one that yields the best score on the cross-validation set.
         log3cs = arange(-2, 8)  # Vary C on an exponantional scale.
         best_score = - Inf
@@ -83,8 +83,8 @@ class SVMOneVsOne(BaseEvaluation):
             #weight = ones(len(tr_cc))
             #weight[tr_cc == 1] *= len(tr_cc) / len(tr_cc[tr_cc == 1])
             weight = 0.01 * ones(len(tr_cc))
-            weight[tr_cc == 1] *= 100 
-            self.clf[idx_clf].fit(tr_K, tr_cc, sample_weight=weight) 
+            weight[tr_cc == 1] *= 100
+            self.clf[idx_clf].fit(tr_K, tr_cc, sample_weight=weight)
             confidence_values = self.clf[idx_clf].predict_proba(cv_K)[:,1]
             score = rff.get_ap(confidence_values, cv_cc)
             if score >= best_score:
