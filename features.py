@@ -23,7 +23,7 @@ from yael import yael
 
 verbose = True  # Global variable used for printing messages.
 
-# Defining some constants, for readability.
+# Defining some constants for better readability.
 FLOAT_SIZE = 4
 DESCS_LEN = {
     'mbh': 192,
@@ -61,7 +61,7 @@ def parse_ip_type(ip_type):
     return stride, track_length, descriptor_type
 
 
-def read_descriptors_from_video(infile, nr_descriptors, **kwargs):
+def read_descriptors_from_video(infile, **kwargs):
     """ Lazy function generator to grab chunks of descriptors from Heng's dense
     trajectories stdout. The code assumes that 'densetracks' outputs 3 numbers
     corresponding to the descriptor position, followed by the descriptor's
@@ -72,7 +72,7 @@ def read_descriptors_from_video(infile, nr_descriptors, **kwargs):
     infile: string, required
         The path to the video file.
 
-    nr_descriptors: int, required
+    nr_descriptors: int, optional, default 1000
         Number of descriptors to be returned.
 
     ip_type: string, optional, default 'dense5.track15mbh'
@@ -85,7 +85,8 @@ def read_descriptors_from_video(infile, nr_descriptors, **kwargs):
         The indices of the end frames.
 
     """
-    # Get keyword arguments.
+    # Get keyword arguments or set default values.
+    nr_descriptors = kwargs.get('nr_descriptors', 1000)
     ip_type = kwargs.get('ip_type', 'dense5.track15mbh')
     begin_frames = kwargs.get('begin_frames', [0])
     end_frames = kwargs.get('end_frames', [1e6])
@@ -104,10 +105,26 @@ def read_descriptors_from_video(infile, nr_descriptors, **kwargs):
         stdout=subprocess.PIPE, bufsize=1)
     while True:
         data = dense_tracks.stdout.read(
-            FLOAT_SIZE * (descriptor_length + position_length))
+            FLOAT_SIZE * (descriptor_length + position_length) * nr_descriptors)
         if not data:
             break
-        yield data
+        formated_data = np.fromstring(data, dtype=np.float32).reshape(
+            (-1, descriptor_length + position_length))
+        yield formated_data
+
+
+def get_time_intervals(start, end, delta, spacing):
+    """ Returns the begining and end frames for chunking the video into 
+    pieces of delta frames that are equally spaced.
+
+    """
+    if spacing == 0 or delta >= end - start:
+        begin_frames = [start]
+        end_frames = [end]
+    else:
+        begin_frames = range(start, end - delta, delta * spacing)
+        end_frames = range(start + delta, end, delta * spacing)
+    return begin_frames, end_frames
 
 
 class DescriptorProcessor:
@@ -186,26 +203,6 @@ class DescriptorProcessor:
 
     def __str__(self):
         pass
-
-    def foo(self):
-        """ Does all! Is it nice enough? I might not want to do this. """
-        try:
-            descriptors = self.load_subsampled_descriptors()
-        except IOError:
-            descriptors = self.subsample_descriptors(2e5)
-            self.save_subsampled_descriptors(descriptors)
-
-        try:
-            pca = self.load_pca()
-        except IOError:
-            pca = self.compute_pca()
-            self.save_pca(pca)
-
-        try:
-            self.load_gmm(pca)
-        except IOError:
-            gmm = self.compute_gmm()
-            self.save_gmm(gmm)
 
     def compute_pca(self, descriptors):
         """ Computes PCA on a subset of nr_samples of descriptors. """
@@ -320,81 +317,47 @@ class DescriptorProcessor:
         posterior probabilities and update the Fisher vector.  
         
         """
-        FLOAT_SIZE = 4  # 4 bytes per float.
         D = gmm.d
-        # Do not store the descriptor.
-        outfile = '0'
+        my_statistics_computation = self.model._compute_statistics
+
         for sample in samples:
-            # sample = SampID(sample)  # No need for this.
+            # The path to the movie.
             infile = os.path.join(
                 self.dataset.SRC_DIR,
                 sample.movie + self.dataset.SRC_EXT)
-
-            fn = os.path.join(
+            # The path for the sufficient statistics.
+            outfile = os.path.join(
                 self.temp_path, 
                 self.bare_fn % (sample, grid[0], grid[1], grid[2], 0))
 
-            try:  # TODO Maybe use with?
-                ff = open(fn, 'r')
-                ff.close()
-                continue 
-            except IOError:
-                ff = open(fn, 'w')
+            # Still not very nice. Maybe I should create the file on the else
+            # branch.
+            if os.path.isfile(outfile):
+                continue
             
-                if spacing == 0:
-                    begin_frames = [sample.bf]
-                    end_frames = [sample.ef]
-                else:
-                    begin_frames = range(sample.bf, sample.ef - delta, delta * spacing)
-                    end_frames = range(sample.bf + delta, sample.ef, delta * spacing)
-                str_begin_frames = '_'.join(map(str, begin_frames))
-                str_end_frames = '_'.join(map(str, end_frames))
-                # TODO Do not preset mbh, 15, 5, but compute those from ip_type.
-                # Extract descriptors and pipe them to this script.
-                dense_tracks = subprocess.Popen(
-                    ['densetracks', infile, outfile, '15',
-                     '5', str_begin_frames, str_end_frames, 'mbh'],
-                    stdout=subprocess.PIPE, bufsize=1)
+            begin_frames, end_frames = get_time_intervals(
+                sample.bf, sample.ef, 120, 4)
 
-                # Fisher vector computation.
-                # TODO For spatial pyramids allocate more fv.
-                fv = np.zeros(self.K + 2 * self.K * D, dtype=np.float32)
-                N = 0
-                while True:
-                    # Read one descriptor: position + descriptors' values.
-                    str_desc = dense_tracks.stdout.read(
-                        FLOAT_SIZE * (3 + self.LEN_DESC))
-                    if not str_desc:
-                        break
-                    position_desc = np.fromstring(str_desc, dtype=np.float32)
-                    position = position_desc[:3]
-                    # TODO Assert that positions are in range.
-                    desc = position_desc[3:]
-                    assert len(desc) == self.LEN_DESC
-                    # TODO Select here the right cell.
+            # TODO For spatial pyramids allocate more fv.
+            N = 0  # Count the number of descriptors for this sample.
+            sstats = np.zeros(self.K + 2 * self.K * D, dtype=np.float32)
 
-                    # Apply PCA to the descriptor.
-                    xx = pca.transform(desc)
+            for chunk in read_descriptors_from_video(
+                infile, begin_frames=begin_frames, end_frames=end_frames):
 
-                    # Compute posterior probabilities.
-                    Q_yael = fvec_new(self.K)
-                    gmm_compute_p(1, numpy_to_fvec_ref(xx), gmm, Q_yael, GMM_FLAGS_W)
-                    Q = fvec_to_numpy(Q_yael, self.K)
-                    yael.free(Q_yael)
+                chunk_size = chunk.shape[0]
+                # TODO Assert that positions are in range.
+                # TODO Select here the right cell.
+                # Apply PCA to the descriptor.
+                xx = pca.transform(chunk[:,3:])
 
-                    # Compute statistics.
-                    Q_xx = (Q[np.newaxis].T * xx).flatten()         # 1xKD
-                    Q_xx_2 = (Q[np.newaxis].T * xx ** 2).flatten()  # 1xKD
+                # Update the sufficient statistics for this sample.
+                sstats += my_statistics_computation(xx, gmm) * chunk_size
+                N += chunk_size
 
-                    # Update the sufficient statistics for this sample.
-                    fv += np.array(hstack((Q, Q_xx, Q_xx_2)))
-                    N += 1
-
-                # Save Fisher vector.
-                # TODO Save all fv's.
-                fv /= N
-                fv.tofile(ff)
-                ff.close()
+            sstats /= N  # Normalize statistics.
+            sstats.tofile(outfile)
+            # TODO Save all fv's.
 
     def compute_statistics_worker(self, samples, grid, pca, gmm):
         """ Worker function for computing the sufficient statistics. It takes
@@ -481,7 +444,7 @@ class DescriptorProcessor:
     def _merge_tmp_statistics(self, data_type, prefix=''):
         """ Data type can be either 'train' or 'test'. """
         nr_bins = prod(self.grid)
-        # File format is <name>_<train/test>_<g0>_<g1>_<g2>_<ii>.
+        # File format is <name>_<train|test>_<g0>_<g1>_<g2>_<ii>.
 
         # Clamp the first 5 parameters. Let free only the index of bin number.
         fn_first = '_'.join(self.bare_fn.split('_')[:-1]) 
@@ -498,7 +461,7 @@ class DescriptorProcessor:
                 return False
             except IOError:
                 pass
-            ff_stats = open(fn_stats % ii, 'w') # Big file containing statistics. 
+            ff_stats = open(fn_stats % ii, 'w')  # Big file containing statistics. 
             for sample in self.dataset.get_data(data_type)[0]:
                 fn = os.path.join(
                     self.temp_path, prefix + self.bare_fn % (sample, self.grid[0], self.grid[1], self.grid[2], ii))  # Small file filename
@@ -530,6 +493,57 @@ class DescriptorProcessor:
                     print 'Exiting...'
                     sys.exit(1)
             ff_stats.close()
+
+    def check_tmp_statistics(self, prefix=''):
+        """ Checks which temporary statistics are missing. """
+        samples = list(set(
+            self.dataset.get_data('train')[0] +
+            self.dataset.get_data('test')[0]))
+        nr_bins = prod(self.grid)
+
+        mismatched_samples = []
+        missing_samples = []
+        bad_samples = []
+        bad_movies = []
+
+        for sample in samples:
+            for ii in xrange(nr_bins):
+                filename = (prefix + self.bare_fn %
+                            (sample, self.grid[0], self.grid[1],
+                             self.grid[2], ii))
+                infile = os.path.join(self.temp_path, filename)
+
+                try:
+                    sstats = np.fromfile(infile, dtype=np.float32)
+                    if prefix == '' and (
+                        len(sstats) !=
+                        self.K + 2 * self.K * self.nr_pca_comps):
+                        mismatched_samples.append(filename)
+                    elif np.isnan(np.sum(sstats)):  # If there exists a NaN.
+                        bad_samples.append(filename)
+                        bad_movies.append(sample.movie)
+                except IOError:
+                    missing_samples.append(filename) 
+
+        if missing_samples:
+            print "Missing samples are:"
+            print " ".join(missing_samples)
+            print
+
+        if mismatched_samples:
+            print "Mismatched samples are:"
+            print " ".join(mismatched_samples)
+            print
+
+        if bad_samples:
+            print "Bad samples (with NaNs) are:"
+            print " ".join(bad_samples)
+            print
+            print "Bad movies:"
+            print " ".join(bad_movies)
+            print
+
+        print "Done checking."
 
     def _remove_tmp_statistics(self, prefix=''):
         samples = list(set(
@@ -599,11 +613,3 @@ class DescriptorProcessor:
             descriptors[ii] = siftgeo[1]
         return descriptors
 
-    def _get_begin_end_frames(start, end, delta=120, spacing=4):
-        """ Returns the begining and end frames for chunking the video into 
-        pieces of delta frames that are equally spaced.
-
-        """
-        begin_frames = range(start, end - delta, delta * spacing)
-        end_frames = range(start + delta, end, delta * spacing)
-        return begin_frames, end_frames
