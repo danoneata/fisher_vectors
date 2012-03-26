@@ -22,6 +22,8 @@ def do(task, src_cfg, ip_type, model_type, K, grids, Ncpus, verbose):
     # Select the task based on opt_type argument.
     if task == 'compute':
         dp.compute_statistics(Ncpus)
+    elif task == 'check':
+        dp.check_tmp_statistics()
     elif task == 'merge':
         dp.merge_statistics()
     elif task == 'remove':
@@ -31,6 +33,8 @@ def do(task, src_cfg, ip_type, model_type, K, grids, Ncpus, verbose):
             evn = 'svm_one_vs_all'
         elif dataset.DATASET == 'hollywood2':
             evn = 'svm_one_vs_one'
+        elif dataset.DATASET == 'trecvid11':
+            evn = 'trecvid11'
         evaluation = Evaluation(evn)
         model.fit(dataset, evaluation)
         with open(os.path.join(
@@ -53,6 +57,7 @@ def usage():
     print '     -o, --opt_type=OPTION_TYPE'
     print '         Specify the task:'
     print '             - "compute": computes statistics'
+    print '             - "check": prints missing temporary statistics'
     print '             - "merge": merge statistics'
     print '             - "remove": removes statistics'
     print '             - "evaluate": evaluates the model.'
@@ -112,7 +117,7 @@ def main():
 
     try:
         task = sys.argv[1]
-        if task not in ('compute', 'merge', 'remove', 'evaluate'):
+        if task not in ('compute', 'check', 'merge', 'remove', 'evaluate'):
             print 'Unknown option.'
             usage()
             sys.exit(1)
