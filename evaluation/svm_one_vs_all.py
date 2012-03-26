@@ -7,6 +7,12 @@ from .base_evaluation import BaseEvaluation
 
 
 class SVMOneVsAll(BaseEvaluation):
+    """ The class name is inaccurate. It does a multiclass SVM and under the
+    hood the classification is handled into a one-vs-one way. A more accurate
+    description would be to relate the evaluation procedure to the dataset it
+    belongs to.
+
+    """
     def __init__(self):
         pass
 
