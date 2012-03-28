@@ -310,7 +310,7 @@ class DescriptorProcessor:
         os.rmdir(self.temp_path)
 
     def compute_statistics_from_video_worker(self, samples, grid, pca, gmm,
-                                             delta=120, spacing=4):
+                                             delta=120, spacing=2):
         """ Computes the Fisher vector directly from the video in an online
         fashion. The chain of actions is the following: compute descriptors one
         by one, get a descriptor and apply PCA to it, then compute the
@@ -336,7 +336,7 @@ class DescriptorProcessor:
                 continue
             
             begin_frames, end_frames = get_time_intervals(
-                sample.bf, sample.ef, 120, 4)
+                sample.bf, sample.ef, delta, spacing)
 
             # TODO For spatial pyramids allocate more fv.
             N = 0  # Count the number of descriptors for this sample.
