@@ -21,6 +21,9 @@ class TrecVid11Evaluation(BaseEvaluation):
     def score(self, Kyx, cy):
         return self._score_one_vs_one(Kyx, cy)
 
+    def predict(self, Kyx, cy):
+        return self._predict_one_vs_one(Kyx, cy)
+
     def _fit_one_vs_rest(self, Kxx, cx):
         """ Fits a one-vs-null SVM classifier. """
         self.nr_classes = len(set(cx))
@@ -146,6 +149,16 @@ class TrecVid11Evaluation(BaseEvaluation):
         good_idxs = cy != self.null_class_idx
         K_good_idxs = np.ix_(good_idxs, self.cx_idxs)
         return self.clf.score(Kyx[K_good_idxs], cy[good_idxs])
+
+    def _predict_one_vs_one(self, Kyx, cy):
+        """ Returns true labels and predicted labels. This is implemented only
+        for ploting purposes.
+        
+        """
+        cy = np.array(cy)
+        good_idxs = cy != self.null_class_idx
+        K_good_idxs = np.ix_(good_idxs, self.cx_idxs)
+        return cy[good_idxs], self.clf.predict(Kyx[K_good_idxs])
 
     def _crossvalidate_C_one_vs_one(self, K, cc):
         # 1. Split Gram matrix and labels into a training set and a validation
