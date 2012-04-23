@@ -24,7 +24,8 @@ class BaseModel(object):
         self.evaluation.fit(self.Kxx, self.cx)
 
     def predict(self):
-        pass
+        """ Only for plotting at the moment. """
+        return self.evaluation.predict(self.Kyx, self.cy)
 
     def score(self):
         return self.evaluation.score(self.Kyx, self.cy)
