@@ -118,7 +118,7 @@ def get_time_intervals(start, end, delta, spacing):
     pieces of delta frames that are equally spaced.
 
     """
-    if spacing == 0 or delta >= end - start:
+    if spacing <= 0 or delta >= end - start:
         begin_frames = [start]
         end_frames = [end]
     else:
@@ -197,9 +197,12 @@ class DescriptorProcessor:
                                    'gmm_%d' % self.K)
         self.bare_fn = '%s_%d_%d_%d_%d.dat'
         self.spatial_bare_fn = 'spatial_%s_%d_%d_%d_%d.dat'
-        self.root_path = os.path.join(self.dataset.FEAT_DIR, 'statistics_k_%d' % self.K)
+        self.root_path = os.path.join(self.dataset.FEAT_DIR,
+                                      'statistics_k_%d' % self.K)
         # Create path for temporary files.
         self.temp_path = os.path.join(self.root_path, 'stats.tmp')
+        self.descriptor_filename = os.path.join(
+            self.dataset.FEAT_DIR, 'features', '%s.siftgeo')
 
     def __str__(self):
         pass
@@ -310,7 +313,7 @@ class DescriptorProcessor:
         os.rmdir(self.temp_path)
 
     def compute_statistics_from_video_worker(self, samples, grid, pca, gmm,
-                                             delta=120, spacing=2):
+                                             delta=120, spacing=-1):
         """ Computes the Fisher vector directly from the video in an online
         fashion. The chain of actions is the following: compute descriptors one
         by one, get a descriptor and apply PCA to it, then compute the
@@ -334,6 +337,7 @@ class DescriptorProcessor:
             # branch.
             if os.path.isfile(outfile):
                 continue
+            open(outfile, 'w').close()
             
             begin_frames, end_frames = get_time_intervals(
                 sample.bf, sample.ef, delta, spacing)
@@ -369,8 +373,9 @@ class DescriptorProcessor:
         for sample in samples:
             sample_id = SampID(sample)
             # Prepare descriptors: select according to the grid and apply PCA.
-            siftgeo = read_video_points_from_siftgeo(os.path.join(
-                self.dataset.FEAT_DIR, 'features', sample + '.siftgeo'))
+            siftgeo = read_video_points_from_siftgeo(
+                self.descriptor_filename % sample)
+
             # TODO Use function get_video_resolution from Dataset
             video_infos = get_video_infos(
                 os.path.join(self.dataset.PREFIX, 'videos',
@@ -612,4 +617,3 @@ class DescriptorProcessor:
         for ii, siftgeo in enumerate(siftgeos):
             descriptors[ii] = siftgeo[1]
         return descriptors
-
