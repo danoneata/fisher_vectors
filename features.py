@@ -137,7 +137,7 @@ def get_slice_number(current_frame, begin_frames, end_frames):
                                                       end_frames)):
         if begin_frame <= current_frame <= end_frame:
             return ii
-    return ii
+    raise Exception('Frame number not in the specified intervals.')
 
 
 class DescriptorProcessor:
