@@ -127,6 +127,19 @@ def get_time_intervals(start, end, delta, spacing):
     return begin_frames, end_frames
 
 
+def get_slice_number(current_frame, begin_frames, end_frames):
+    """ Returns the index that corresponds to the slice that the current frame
+    falls in.
+
+    """
+    ii = 0
+    for ii, (begin_frame, end_frame) in enumerate(zip(begin_frames,
+                                                      end_frames)):
+        if begin_frame <= current_frame <= end_frame:
+            return ii
+    return ii
+
+
 class DescriptorProcessor:
     """ Descriptor processing class.
 
@@ -286,7 +299,7 @@ class DescriptorProcessor:
             nr_samples_per_process = len(samples) // nr_processes + 1
             for ii in xrange(nr_processes):
                 process = mp.Process(
-                    target=self.compute_statistics_from_video_worker,
+                    target=self.compute_statistics_from_video_per_slice_worker,
                     args=(samples[ii * nr_samples_per_process :
                                   (ii + 1) * nr_samples_per_process],
                           self.grid, pca, gmm))
@@ -297,7 +310,8 @@ class DescriptorProcessor:
                 process.join()
         else:
             # We use this special case, because it makes possible to debug.
-            self.compute_statistics_worker(samples, self.grid, pca, gmm)
+            self.compute_statistics_from_video_per_slice_worker(
+                samples, self.grid, pca, gmm)
 
     def merge_statistics(self):
         self._merge_tmp_statistics('train')
@@ -311,6 +325,58 @@ class DescriptorProcessor:
         if self.model.is_spatial_model:
             self._remove_tmp_statistics('spatial_') 
         os.rmdir(self.temp_path)
+
+    def compute_statistics_from_video_per_slice_worker(self, samples, grid,
+                                                       pca, gmm, delta=120,
+                                                       spacing=4):
+        """ Computes the Fisher vectors for each slice that results from the
+        temporal spliting of get_time_intervals. The resulting Fisher vectors
+        are outputed to a binary file.
+
+        """
+        D = gmm.d
+        my_statistics_computation = self.model._compute_statistics
+
+        for sample in samples:
+            # The path to the movie.
+            infile = os.path.join(
+                self.dataset.SRC_DIR,
+                sample.movie + self.dataset.SRC_EXT)
+            # The path for the sufficient statistics.
+            outfile = os.path.join(
+                self.temp_path, 
+                self.bare_fn % (sample, grid[0], grid[1], grid[2], 0))
+
+            # Still not very nice. Maybe I should create the file on the else
+            # branch.
+            if os.path.isfile(outfile):
+                continue
+            open(outfile, 'w').close()
+            
+            begin_frames, end_frames = get_time_intervals(
+                sample.bf, sample.ef, delta, spacing)
+
+            # Count the number of descriptors for each chunk.
+            nr_slices = len(begin_frames)
+            N = np.zeros(nr_slices)
+            sstats = np.zeros((nr_slices, self.K + 2 * self.K * D),
+                              dtype=np.float32)
+
+            for chunk in read_descriptors_from_video(
+                infile, begin_frames=begin_frames, end_frames=end_frames,
+                nr_descriptors=1):
+
+                xx = pca.transform(chunk[:, 3:])
+                
+                # Determine slice number based on time.
+                ii = get_slice_number(chunk[:, 2], begin_frames, end_frames)
+                N[ii] += 1
+
+                # Update corresponding sstats cell.
+                sstats[ii] += my_statistics_computation(xx, gmm)
+
+            sstats /= N[:, np.newaxis]
+            sstats.tofile(outfile)
 
     def compute_statistics_from_video_worker(self, samples, grid, pca, gmm,
                                              delta=120, spacing=-1):
@@ -353,7 +419,7 @@ class DescriptorProcessor:
                 # TODO Assert that positions are in range.
                 # TODO Select here the right cell.
                 # Apply PCA to the descriptor.
-                xx = pca.transform(chunk[:,3:])
+                xx = pca.transform(chunk[:, 3:])
 
                 # Update the sufficient statistics for this sample.
                 sstats += my_statistics_computation(xx, gmm) * chunk_size
