@@ -1,0 +1,11 @@
+This file provides some information on how the baseline files were generated.
+
+  person01_boxing_d1-frames-1-95.siftgeo
+    Video descriptor for the movie sample from the dataset. The descriptor was
+    generated using the default parameters for the dense tracks code. The command
+    is the following:
+    >> densetracks ~/data/kth/videos/person01_boxing_d1.avi \
+     person01_boxing_d1-frames-1-95.siftgeo 15 5 1 95 mbh
+
+  person01_boxing_d1-frames-1-95_1_1_1_0.dat
+    The sufficient statistics that characterize the video descriptors.
