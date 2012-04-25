@@ -4,8 +4,6 @@ import os
 from ipdb import set_trace
 from numpy import prod, zeros
 
-from ..data import Data
-
 
 class BaseModel(object):
     def __init__(self, K, grids):
