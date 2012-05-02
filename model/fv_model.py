@@ -3,9 +3,11 @@ import numpy as np
 from numpy import abs, dot, hstack, mean, newaxis, sign, sum, sqrt, std, zeros
 
 from .base_model import BaseModel
+from ..transform_sstats import sstats_to_fv
 from yael import yael
 from yael.yael import fvec_new, fvec_to_numpy, numpy_to_fvec_ref
 from yael.yael import gmm_compute_p, GMM_FLAGS_W
+
 
 class FVModel(BaseModel):
     """ Fisher vectors model.
@@ -37,7 +39,7 @@ class FVModel(BaseModel):
     def _compute_statistics(self, xx, gmm):
         """ Worker function for statistics computations. Takes as input a NxD
         data matrix xx and the gmm object. Returns the corresponding statistics
-        ---a vector of length D * (2 * K + 1). Using these statistics we can 
+        ---a vector of length D * (2 * K + 1). Using these statistics we can
         then easily compute the Fisher vectors or a soft bag-of-words histogram
 
         """
@@ -56,10 +58,10 @@ class FVModel(BaseModel):
 
     def compute_kernels(self, dataset):
         self._init_kernels(dataset)
-        self._compute_kernels(dataset, self._compute_features)
+        self._compute_kernels(dataset, sstats_to_fv)
         self._L2_normalize_kernels()
         return self.Kxx, self.Kyx
-    
+
     def _init_kernels(self, dataset):
         super(FVModel, self)._init_kernels(dataset)
         self.Zx = zeros(self.Nx)
@@ -85,37 +87,6 @@ class FVModel(BaseModel):
             #yy = self._L2_normalize(yy)
             self.Zy += self._compute_L2_normalization(yy)
             self.Kyx += dot(yy, xx.T)
-
-    @classmethod
-    def _compute_features(cls, ss, gmm, fn=None):
-        """ Gets the statistics ss and the Gaussian mixture model object gmm
-        and returns a NxD matrix containing the Fisher vectors.
-
-        """
-        K = gmm.k
-        D = gmm.d
-        ss = ss.reshape(-1, K + 2 * K * D)
-        N = ss.shape[0]
-        # Get parameters and reshape them.
-        pi = yael.fvec_to_numpy(gmm.w, K)            # 1xK
-        mu = (yael.fvec_to_numpy(gmm.mu, K * D)
-              .reshape(D, K, order='F')[newaxis])    # 1xDxK
-        sigma = (yael.fvec_to_numpy(gmm.sigma, K * D).
-                 reshape(D, K, order='F')[newaxis])  # 1xDxK
-        # Get each part of the sufficient statistics.
-        Q_sum = ss[:, :K]                            # NxK (then Nx1xK) 
-        Q_xx = ss[:, K:K + D * K]                    # NxKD
-        Q_xx_2 = ss[:, K + D * K:K + 2 * D * K]      # NxKD
-        # Compute derivatives.
-        d_pi = Q_sum - pi
-        d_mu = Q_xx - (Q_sum[:, newaxis] * mu).reshape(N, D * K, order='F')
-        d_sigma = (
-            - Q_xx_2
-            - (Q_sum[:, newaxis] * mu ** 2).reshape(N, D * K, order='F')
-            + (Q_sum[:, newaxis] * sigma).reshape(N, D * K, order='F')
-            + 2 * Q_xx * mu.reshape(1, K * D, order='F'))
-        xx = hstack((d_pi, d_mu, d_sigma))
-        return xx
 
     def _standardize(self, xx, mu=None, sigma=None):
         """ Returns the standardized data, i.e., zero mean and unit variance
