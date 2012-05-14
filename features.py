@@ -31,6 +31,7 @@ DESCS_LEN = {
     'hof': 108,
     'hoghof': 96 + 108,
     'all': 96 + 108 + 192}
+NR_FRAMES_TO_SKIP = 0
 
 
 def parse_ip_type(ip_type):
@@ -84,12 +85,17 @@ def read_descriptors_from_video(infile, **kwargs):
     end_frames: list, optional, default [1e6]
         The indices of the end frames.
 
+    nr_skip_frames: int, optional, default 0
+        The number of frames that are skipped; for every (nr_skip_frames + 1)
+        frames, (nr_skip_frames) are ignored. 
+
     """
     # Get keyword arguments or set default values.
     nr_descriptors = kwargs.get('nr_descriptors', 1000)
     ip_type = kwargs.get('ip_type', 'dense5.track15mbh')
     begin_frames = kwargs.get('begin_frames', [0])
     end_frames = kwargs.get('end_frames', [1e6])
+    nr_skip_frames = kwargs.get('nr_skip_frames', 0)
 
     # Prepare arguments for Heng's code.
     stride, track_length, descriptor_type = parse_ip_type(ip_type)
@@ -101,7 +107,8 @@ def read_descriptors_from_video(infile, **kwargs):
 
     dense_tracks = subprocess.Popen(
         ['densetracks', infile, '0', track_length, stride,
-         str_begin_frames, str_end_frames, descriptor_type],
+         str_begin_frames, str_end_frames, descriptor_type, '1',
+         str(nr_skip_frames)],
         stdout=subprocess.PIPE, bufsize=1)
     while True:
         data = dense_tracks.stdout.read(
@@ -299,7 +306,7 @@ class DescriptorProcessor:
             nr_samples_per_process = len(samples) // nr_processes + 1
             for ii in xrange(nr_processes):
                 process = mp.Process(
-                    target=self.compute_statistics_from_video_per_slice_worker,
+                    target=self.compute_statistics_from_video_worker,
                     args=(samples[ii * nr_samples_per_process :
                                   (ii + 1) * nr_samples_per_process],
                           self.grid, pca, gmm))
@@ -310,7 +317,7 @@ class DescriptorProcessor:
                 process.join()
         else:
             # We use this special case, because it makes possible to debug.
-            self.compute_statistics_from_video_per_slice_worker(
+            self.compute_statistics_from_video_worker(
                 samples, self.grid, pca, gmm)
 
     def merge_statistics(self):
@@ -364,7 +371,7 @@ class DescriptorProcessor:
 
             for chunk in read_descriptors_from_video(
                 infile, begin_frames=begin_frames, end_frames=end_frames,
-                nr_descriptors=1):
+                nr_descriptors=1, nr_skip_frames=NR_FRAMES_TO_SKIP):
 
                 xx = pca.transform(chunk[:, 3:])
                 
@@ -375,11 +382,15 @@ class DescriptorProcessor:
                 # Update corresponding sstats cell.
                 sstats[ii] += my_statistics_computation(xx, gmm)
 
+            # Ignore chunks with 0 descriptors
+            sstats = sstats[N != 0, :]
+            N = N[N != 0]
+
             sstats /= N[:, np.newaxis]
             sstats.tofile(outfile)
 
     def compute_statistics_from_video_worker(self, samples, grid, pca, gmm,
-                                             delta=120, spacing=-1):
+                                             delta=120, spacing=0):
         """ Computes the Fisher vector directly from the video in an online
         fashion. The chain of actions is the following: compute descriptors one
         by one, get a descriptor and apply PCA to it, then compute the
@@ -413,7 +424,8 @@ class DescriptorProcessor:
             sstats = np.zeros(self.K + 2 * self.K * D, dtype=np.float32)
 
             for chunk in read_descriptors_from_video(
-                infile, begin_frames=begin_frames, end_frames=end_frames):
+                infile, begin_frames=begin_frames, end_frames=end_frames,
+                nr_skip_frames=NR_FRAMES_TO_SKIP):
 
                 chunk_size = chunk.shape[0]
                 # TODO Assert that positions are in range.
