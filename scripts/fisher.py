@@ -29,13 +29,7 @@ def do(task, src_cfg, ip_type, model_type, K, grids, Ncpus, verbose):
     elif task == 'remove':
         dp.remove_statistics()
     elif task == 'evaluate':
-        if dataset.DATASET == 'kth':
-            evn = dataset.DATASET
-        elif dataset.DATASET == 'hollywood2':
-            evn = 'svm_one_vs_one'
-        elif dataset.DATASET == 'trecvid11':
-            evn = dataset.DATASET
-        evaluation = Evaluation(evn)
+        evaluation = Evaluation(dataset.DATASET)
         model.fit(dataset, evaluation)
         with open(os.path.join(
             ROOT_PATH, dataset.DATASET, 'results', RESULTS_FN), 'a') as ff:
