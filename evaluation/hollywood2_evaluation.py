@@ -45,13 +45,14 @@ class Hollywood2Evaluation(BaseEvaluation):
         for ii in xrange(self.nr_classes):
             labels = cx[:, ii]
 
-            # TODO Include class weights here.
-            my_svm = svm.SVC(kernel='precomputed', probability=True)
+            # Better results with these weights: my_weights = {-1: 1, 1: 100}
+            my_svm = svm.SVC(kernel='precomputed', probability=True,
+                             class_weight='auto')
 
             c_values = np.power(3.0, np.arange(-2, 8))
             tuned_parameters = [{'C': c_values}]
 
-            splits = StratifiedShuffleSplit(labels, 3, test_size=0.3)
+            splits = StratifiedShuffleSplit(labels, 1, test_size=0.25)
             self.clf.append(
                 GridSearchCV(my_svm, tuned_parameters,
                              score_func=average_precision,
