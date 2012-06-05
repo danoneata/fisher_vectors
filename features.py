@@ -635,37 +635,3 @@ class DescriptorProcessor:
                 except:
                     sw = False
         return sw
-
-    def _compute_subsample_descriptors(self, nr_samples):
-        """ Gets a subsample of the the descriptors and it is saved to the
-        subset.siftgeo file. 
-        
-        """
-        bash_cmd = ('/home/clear/oneata/scripts2/bash_functions/' +
-                    'run_subsample.sh %s %s %s' %
-                    (self.dataset.DATASET, self.dataset.FTYPE,
-                     str(nr_samples)))
-        os.system(bash_cmd)
-
-    def _load_subsample_descriptors(self):
-        """ Returns a NxD dimensional matrix representing a subsample of the
-        descriptors. 
-        
-        """
-        if os.path.exists(self.fn_subsample):
-            with open(self.fn_subsample, 'r'):
-                pass
-            siftgeos = read_video_points_from_siftgeo(self.fn_subsample)
-            N = len(siftgeos)
-            D = len(siftgeos[0][1])
-            descriptors = zeros((N, D), dtype=np.float32)
-            for ii, siftgeo in enumerate(siftgeos):
-                descriptors[ii] = siftgeo[1]
-            return descriptors
-        elif os.path.exists(self.fn_subsample_dat):
-            descriptors = np.fromfile(
-                self.fn_subsample_dat, dtype=np.float32).reshape(
-                    (-1, DESCS_LEN['mbh'] + 3))
-            return descriptors[:, 3:]
-        else:
-            raise IOError
