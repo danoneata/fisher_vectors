@@ -6,22 +6,18 @@ import re
 import subprocess
 import sys
 
-import cPickle as cp
 import numpy as np
-from numpy import digitize, dot, hstack, linspace
-from numpy import sum, prod, vstack, zeros
-from sklearn.decomposition import PCA
+from numpy import digitize, linspace
+from numpy import prod, vstack, zeros
 from ipdb import set_trace
 
 from dataset import SampID
 from .utils.profile import conditional_profile as profile
 from .preprocess.pca import load_pca
+from .preprocess.gmm import load_gmm
 from vidbase.vidplayer import get_video_infos
 from video_vwgeo import read_video_points_from_siftgeo
-from yael.yael import count_cpu, fvec_new, fvec_to_numpy, numpy_to_fvec_ref
-from yael.yael import gmm_compute_p, gmm_learn, gmm_read, gmm_write
-from yael.yael import GMM_FLAGS_W
-from yael import yael
+from yael.yael import count_cpu
 
 verbose = True  # Global variable used for printing messages.
 
@@ -236,30 +232,6 @@ class DescriptorProcessor:
     def __str__(self):
         pass
 
-    def compute_gmm(self, pca, nr_iter=100, nr_threads=None,
-                    seed=1, nr_redo=4, nr_samples=2e5):
-        """ Computes GMM using yael functions. """
-        if nr_threads is None:
-            nr_threads = self.NR_CPUS
-        descriptors = self._load_subsample_descriptors()
-        print len(descriptors)
-        if pca:
-            descriptors = pca.transform(descriptors)
-        N, D = descriptors.shape
-        gmm = gmm_learn(D, N, self.K, nr_iter, numpy_to_fvec_ref(descriptors),
-                        nr_threads, seed, nr_redo, GMM_FLAGS_W)
-        return gmm
-
-    def save_gmm(self, gmm):
-        with open(self.fn_gmm, 'w') as ff:
-            gmm_write(gmm, ff)
-
-    def load_gmm(self):
-        """ Loads GMM object from file using yael. """
-        with open(self.fn_gmm, 'r') as ff:
-            gmm = gmm_read(ff)
-            return gmm
-
     @profile(True)
     def compute_statistics(self, nr_processes=None):
         """ Computes sufficient statistics needed for the bag-of-words or
@@ -292,7 +264,7 @@ class DescriptorProcessor:
         samples = list(set(train_samples + test_samples))
 
         pca = load_pca(self.fn_pca)
-        gmm = self.load_gmm()
+        gmm = load_gmm(self.fn_gmm)
         # Insert here a for grid in self.model.grids: 
         if nr_processes > 1:
             import multiprocessing as mp
