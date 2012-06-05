@@ -14,6 +14,8 @@ from sklearn.decomposition import PCA
 from ipdb import set_trace
 
 from dataset import SampID
+from .utils.profile import conditional_profile as profile
+from .preprocess.pca import load_pca
 from vidbase.vidplayer import get_video_infos
 from video_vwgeo import read_video_points_from_siftgeo
 from yael.yael import count_cpu, fvec_new, fvec_to_numpy, numpy_to_fvec_ref
@@ -32,6 +34,9 @@ DESCS_LEN = {
     'hoghof': 96 + 108,
     'all': 96 + 108 + 192}
 NR_FRAMES_TO_SKIP = 0
+#DELTA = 120
+DELTA = 0
+SPACING = 0
 
 
 def parse_ip_type(ip_type):
@@ -67,7 +72,7 @@ def read_descriptors_from_video(infile, **kwargs):
     trajectories stdout. The code assumes that 'densetracks' outputs 3 numbers
     corresponding to the descriptor position, followed by the descriptor's
     values. Each outputed number is assumed to be a float.
-    
+
     Parameters
     ----------
     infile: string, required
@@ -80,14 +85,14 @@ def read_descriptors_from_video(infile, **kwargs):
         The type of descriptors to be returned.
 
     begin_frames: list, optional, default [0]
-        The indices of the beginning frames. 
+        The indices of the beginning frames.
 
     end_frames: list, optional, default [1e6]
         The indices of the end frames.
 
     nr_skip_frames: int, optional, default 0
         The number of frames that are skipped; for every (nr_skip_frames + 1)
-        frames, (nr_skip_frames) are ignored. 
+        frames, (nr_skip_frames) are ignored.
 
     """
     # Get keyword arguments or set default values.
@@ -139,11 +144,11 @@ def get_slice_number(current_frame, begin_frames, end_frames):
     falls in.
 
     """
-    ii = 0
     for ii, (begin_frame, end_frame) in enumerate(zip(begin_frames,
                                                       end_frames)):
         if begin_frame <= current_frame <= end_frame:
             return ii
+    #return -1   # Why did you do this, past Dan? Maybe future Dan will explain.
     raise Exception('Frame number not in the specified intervals.')
 
 
@@ -189,12 +194,14 @@ class DescriptorProcessor:
 
     """
 
-    def __init__(self, dataset, model):
+    def __init__(self, dataset, model, **kwargs):
         self.dataset = dataset
         self.model = model
         self.K = self.model.K
         self.grid = self.model.grids[0]
         self.NR_CPUS = count_cpu()
+
+        self.sw_profile = kwargs.get('sw_profile', False)
 
         # The length of a descriptor.
         desc_type = dataset.FTYPE.split('.')[-1]
@@ -211,6 +218,8 @@ class DescriptorProcessor:
         self.nr_samples = 2e5
         self.fn_subsample = os.path.join(self.dataset.FEAT_DIR,
                                          'subset.siftgeo')
+        self.fn_subsample_dat = os.path.join(self.dataset.FEAT_DIR,
+                                         'subset.dat')
         self.fn_pca = os.path.join(self.dataset.FEAT_DIR, 'pca',
                                    'pca_%d.pkl' % self.nr_pca_comps)
         self.fn_gmm = os.path.join(self.dataset.FEAT_DIR, 'gmm',
@@ -226,22 +235,6 @@ class DescriptorProcessor:
 
     def __str__(self):
         pass
-
-    def compute_pca(self, descriptors):
-        """ Computes PCA on a subset of nr_samples of descriptors. """
-        pca = PCA(n_components=self.nr_pca_comps)
-        pca.fit(descriptors)
-        return pca
-
-    def save_pca(self, pca):
-        with open(self.fn_pca, 'w') as ff:
-            cp.dump(pca, ff)
-
-    def load_pca(self):
-        """ Loads PCA object from file using cPickle. """
-        with open(self.fn_pca, 'r') as ff:
-            pca = cp.load(ff)
-            return pca
 
     def compute_gmm(self, pca, nr_iter=100, nr_threads=None,
                     seed=1, nr_redo=4, nr_samples=2e5):
@@ -267,6 +260,7 @@ class DescriptorProcessor:
             gmm = gmm_read(ff)
             return gmm
 
+    @profile(True)
     def compute_statistics(self, nr_processes=None):
         """ Computes sufficient statistics needed for the bag-of-words or
         Fisher vector model.
@@ -297,7 +291,7 @@ class DescriptorProcessor:
         test_samples = self.dataset.get_data('test')[0]
         samples = list(set(train_samples + test_samples))
 
-        pca = self.load_pca()
+        pca = load_pca(self.fn_pca)
         gmm = self.load_gmm()
         # Insert here a for grid in self.model.grids: 
         if nr_processes > 1:
@@ -334,8 +328,8 @@ class DescriptorProcessor:
         os.rmdir(self.temp_path)
 
     def compute_statistics_from_video_per_slice_worker(self, samples, grid,
-                                                       pca, gmm, delta=120,
-                                                       spacing=4):
+                                                       pca, gmm, delta=DELTA,
+                                                       spacing=SPACING):
         """ Computes the Fisher vectors for each slice that results from the
         temporal spliting of get_time_intervals. The resulting Fisher vectors
         are outputed to a binary file.
@@ -390,7 +384,7 @@ class DescriptorProcessor:
             sstats.tofile(outfile)
 
     def compute_statistics_from_video_worker(self, samples, grid, pca, gmm,
-                                             delta=120, spacing=0):
+                                             delta=DELTA, spacing=SPACING):
         """ Computes the Fisher vector directly from the video in an online
         fashion. The chain of actions is the following: compute descriptors one
         by one, get a descriptor and apply PCA to it, then compute the
@@ -686,12 +680,20 @@ class DescriptorProcessor:
         descriptors. 
         
         """
-        with open(self.fn_subsample, 'r'):
-            pass
-        siftgeos = read_video_points_from_siftgeo(self.fn_subsample)
-        N = len(siftgeos)
-        D = len(siftgeos[0][1])
-        descriptors = zeros((N, D), dtype=np.float32)
-        for ii, siftgeo in enumerate(siftgeos):
-            descriptors[ii] = siftgeo[1]
-        return descriptors
+        if os.path.exists(self.fn_subsample):
+            with open(self.fn_subsample, 'r'):
+                pass
+            siftgeos = read_video_points_from_siftgeo(self.fn_subsample)
+            N = len(siftgeos)
+            D = len(siftgeos[0][1])
+            descriptors = zeros((N, D), dtype=np.float32)
+            for ii, siftgeo in enumerate(siftgeos):
+                descriptors[ii] = siftgeo[1]
+            return descriptors
+        elif os.path.exists(self.fn_subsample_dat):
+            descriptors = np.fromfile(
+                self.fn_subsample_dat, dtype=np.float32).reshape(
+                    (-1, DESCS_LEN['mbh'] + 3))
+            return descriptors[:, 3:]
+        else:
+            raise IOError
