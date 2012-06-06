@@ -3,7 +3,7 @@ import numpy as np
 from numpy import abs, dot, hstack, mean, newaxis, sign, sum, sqrt, std, zeros
 
 from .base_model import BaseModel
-from ..transform_sstats import sstats_to_fv
+from transform_sstats import sstats_to_fv
 from yael import yael
 from yael.yael import fvec_new, fvec_to_numpy, numpy_to_fvec_ref
 from yael.yael import gmm_compute_p, GMM_FLAGS_W
@@ -36,19 +36,32 @@ class FVModel(BaseModel):
         ss = super(FVModel, self).__str__()
         return 'FV ' + ss
 
-    def _compute_statistics(self, xx, gmm):
-        """ Worker function for statistics computations. Takes as input a NxD
-        data matrix xx and the gmm object. Returns the corresponding statistics
-        ---a vector of length D * (2 * K + 1). Using these statistics we can
-        then easily compute the Fisher vectors or a soft bag-of-words histogram
+    @staticmethod
+    def _compute_statistics(xx, gmm):
+        """ Converts the descriptors to sufficient statistics.
+        
+        Inputs
+        ------
+        xx: array [nr_descs, nr_dimensions]
+            Data matrix containing the descriptors.
+
+        gmm: yael.gmm instance
+            Mixture of Gaussian object.
+
+        Output
+        ------
+        sstats: array [nr_clusters + 2 * nr_clusters * nr_dimensions, ]
+            Concatenation of the averaged posterior probabilities `Q_sum`, the
+            first moment `Q_xx` and second-order moment `Q_xx_2`.
 
         """
         xx = np.atleast_2d(xx)
         N = xx.shape[0]
+        K = gmm.k
         # Compute posterior probabilities using yael.
-        Q_yael = fvec_new(N * self.K)
+        Q_yael = fvec_new(N * K)
         gmm_compute_p(N, numpy_to_fvec_ref(xx), gmm, Q_yael, GMM_FLAGS_W)
-        Q = fvec_to_numpy(Q_yael, N * self.K).reshape(N, self.K)
+        Q = fvec_to_numpy(Q_yael, N * K).reshape(N, K)
         yael.free(Q_yael)
         # Compute statistics.
         Q_sum = sum(Q, 0) / N                     # 1xK

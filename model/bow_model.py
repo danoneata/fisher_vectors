@@ -21,7 +21,24 @@ class BOWModel(BaseModel):
         ss = super(BOWModel, self).__str__()
         return 'BOW ' + ss
 
-    def compute_statistics(self, xx, gmm):
+    @staticmethod
+    def _compute_statistics(xx, gmm):
+        """ Converts the descriptors to sufficient statistics.
+        
+        Inputs
+        ------
+        xx: array [nr_descs, nr_dimensions]
+            Data matrix containing the descriptors.
+
+        gmm: yael.gmm instance
+            Mixture of Gaussian object.
+
+        Output
+        ------
+        Q_sum: array [nr_clusters, ]
+            Averaged posterior probabilities.
+
+        """
         N = xx.shape[0]
         # Compute posterior probabilities using yael.
         Q_yael = fvec_new(N * self.K)
