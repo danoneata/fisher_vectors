@@ -1,7 +1,6 @@
 #!/usr/bin/python
 from __future__ import division
-from collections import defaultdict
-from itertools import product
+
 import multiprocessing
 import os
 import re
@@ -9,29 +8,19 @@ import subprocess
 import sys
 
 import numpy as np
-from numpy import digitize, linspace
-from numpy import prod, vstack, zeros
+from numpy import digitize
+from numpy import linspace
 from ipdb import set_trace
 
 from model import Model
-from dataset import SampID, Dataset
+from dataset import Dataset
 from data import SstatsMap
+
 from preprocess.pca import load_pca
 from preprocess.gmm import load_gmm
+from preprocess.subset import DESCS_LEN
+
 from vidbase.vidplayer import get_video_infos
-from video_vwgeo import read_video_points_from_siftgeo
-from yael.yael import count_cpu
-
-verbose = True  # Global variable used for printing messages.
-
-# Defining some constants for better readability.
-FLOAT_SIZE = 4
-DESCS_LEN = {
-    'mbh': 192,
-    'hog': 96,
-    'hof': 108,
-    'hoghof': 96 + 108,
-    'all': 96 + 108 + 192}
 
 
 def parse_ip_type(ip_type):
@@ -90,6 +79,8 @@ def read_descriptors_from_video(infile, **kwargs):
         frames, (nr_skip_frames) are ignored.
 
     """
+    FLOAT_SIZE = 4
+
     # Get keyword arguments or set default values.
     nr_descriptors = kwargs.get('nr_descriptors', 1000)
     ip_type = kwargs.get('ip_type', 'dense5.track15mbh')
@@ -148,7 +139,16 @@ def get_slice_number(current_frame, begin_frames, end_frames):
 
 
 def get_sample_label(dataset, sample):
-    pass
+    tr_samples, tr_labels = dataset.get_data('train')
+    te_samples, te_labels = dataset.get_data('test')
+
+    samples = tr_samples + te_samples
+    labels = tr_labels + te_labels
+
+    for _sample, _label in zip(samples, labels):
+        if str(sample) == str(_sample):
+            return _label
+    raise Exception('Sample was not found in the dataset.')
 
 
 def compute_statistics(src_cfg, K, **kwargs):
@@ -162,8 +162,9 @@ def compute_statistics(src_cfg, K, **kwargs):
     dataset = Dataset(src_cfg, ip_type=ip_type)
     dataset.VOC_SIZE = K
 
-    # TODO Correct Fisher vector model.
-    descs_to_sstats = kwargs.get('descs_to_sstats', Model('fv', K)._compute_statistics)
+    model_type = kwargs.get('model_type', 'fv')
+    descs_to_sstats = Model(model_type, K)._compute_statistics()
+
     worker = kwargs.get('worker', compute_statistics_from_video_worker)
 
     fn_pca = os.path.join(dataset.FEAT_DIR, 'pca', 'pca_64.pkl')
@@ -175,13 +176,15 @@ def compute_statistics(src_cfg, K, **kwargs):
     grids = kwargs.get('grids', [(1, 1, 1)])
     nr_processes = kwargs.get('nr_processes', multiprocessing.cpu_count())
 
+    outfilename = kwargs.get('outfilename', 'stats.tmp')
+
     train_samples = dataset.get_data('train')[0]
     test_samples = dataset.get_data('test')[0]
     samples = list(set(train_samples + test_samples))
     
     sstats_out = SstatsMap(
         os.path.join(
-            dataset.FEAT_DIR, 'statistics_k_%d' % K, 'my_stats'))
+            dataset.FEAT_DIR, 'statistics_k_%d' % K, outfilename))
     set_trace()
 
     # Insert here a for grid in model.grids: 
@@ -282,7 +285,7 @@ def compute_statistics_from_video_worker(dataset, samples, sstats_out,
 
 
 def main():
-    # Parse argumets.
+    # TODO Parse argumets + usage
     pass
     compute_statistics('hollywood2_medium', 100, nr_processes=1)
 
