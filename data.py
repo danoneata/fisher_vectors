@@ -1,3 +1,4 @@
+#!/usr/bin/python
 import cPickle
 import numpy as np
 import os
@@ -110,3 +111,57 @@ class SstatsMap(object):
                 if verbose:
                     print filename
         return status
+
+    def merge(self, filenames, outfilename, **kwargs):
+        """ Merges a specified set of filenames.
+
+        Inputs
+        ------
+        samples: list of strings
+            The samples names whose sufficient statistics will be merged.
+
+        outfilename: str
+            Name of the output file.
+
+        outfolder: str, optional
+            Name of the output folder. By default, the output folder is the
+            same as the folder where the statistics are saved.
+
+        Note: The function also computes the associated file with labels. This
+        file will be named as 'labels_' + `outfilename`.
+
+        """
+        outfolder = kwargs.get('outfolder', self.basepath)
+
+        sstats_filename = os.path.join(outfolder, outfilename + self.data_ext)
+        labels_filename = os.path.join(outfolder, 'labels_'
+                                       + outfilename + self.data_ext)
+
+        sstats_file = open(sstats_filename, 'a')
+        labels_file = open(labels_filename, 'w')
+
+        all_labels = []
+        for sample in samples:
+            sstats = self.read(str(sample))
+            label = self.read_info(str(sample))['label']
+
+            nr_elems = len(sstats)
+            nr_of_slices = nr_elems / len_sstat
+            assert nr_elems % len_sstat == 0, ("The length of the sufficient"
+                                              "statistics is not a multiple of"
+                                              "the length of the descriptor.")
+
+            all_labels += [label for ii in xrange(nr_of_slices)]
+            sstats.tofile(sstats_file)
+
+        cPickle.dump(all_labels, labels_file)
+        sstats_file.close()
+        labels_file.close()
+
+
+def main():
+    pass
+
+
+if __name__ == '__main__':
+    main()
