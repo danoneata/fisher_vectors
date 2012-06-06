@@ -1,6 +1,7 @@
 #!/usr/bin/python
 from __future__ import division
 
+import getopt
 import multiprocessing
 import os
 import re
@@ -10,6 +11,7 @@ import sys
 import numpy as np
 from numpy import digitize
 from numpy import linspace
+from numpy.testing import assert_allclose
 from ipdb import set_trace
 
 from model import Model
@@ -134,7 +136,9 @@ def get_slice_number(current_frame, begin_frames, end_frames):
                                                       end_frames)):
         if begin_frame <= current_frame <= end_frame:
             return ii
-    #return -1   # Why did you do this, past Dan? Maybe future Dan will explain.
+    # return -1  
+    # Why did you do this, past Dan? Maybe future Dan will explain.
+    # I still have no clue today, on the 6th of June.
     raise Exception('Frame number not in the specified intervals.')
 
 
@@ -145,32 +149,37 @@ def get_sample_label(dataset, sample):
     samples = tr_samples + te_samples
     labels = tr_labels + te_labels
 
+    label = ()
     for _sample, _label in zip(samples, labels):
         if str(sample) == str(_sample):
-            return _label
-    raise Exception('Sample was not found in the dataset.')
+            label += (_label, )
+
+    if label is ():
+        raise Exception('Sample was not found in the dataset.')
+    return label
 
 
-def compute_statistics(src_cfg, K, **kwargs):
+def compute_statistics(src_cfg, **kwargs):
     """ Computes sufficient statistics needed for the bag-of-words or
     Fisher vector model.
 
     """
     # Default parameters.
     ip_type = kwargs.get('ip_type', 'dense5.track15mbh')
+    nr_clusters = kwargs.get('nr_clusters', 128)
 
     dataset = Dataset(src_cfg, ip_type=ip_type)
-    dataset.VOC_SIZE = K
+    dataset.VOC_SIZE = nr_clusters
 
     model_type = kwargs.get('model_type', 'fv')
-    descs_to_sstats = Model(model_type, K)._compute_statistics()
+    descs_to_sstats = Model(model_type, nr_clusters)._compute_statistics
 
     worker = kwargs.get('worker', compute_statistics_from_video_worker)
 
     fn_pca = os.path.join(dataset.FEAT_DIR, 'pca', 'pca_64.pkl')
     pca = kwargs.get('pca', load_pca(fn_pca))
 
-    fn_gmm = os.path.join(dataset.FEAT_DIR, 'gmm', 'gmm_%d' % K)
+    fn_gmm = os.path.join(dataset.FEAT_DIR, 'gmm', 'gmm_%d' % nr_clusters)
     gmm = kwargs.get('gmm', load_gmm(fn_gmm))
 
     grids = kwargs.get('grids', [(1, 1, 1)])
@@ -184,8 +193,7 @@ def compute_statistics(src_cfg, K, **kwargs):
     
     sstats_out = SstatsMap(
         os.path.join(
-            dataset.FEAT_DIR, 'statistics_k_%d' % K, outfilename))
-    set_trace()
+            dataset.FEAT_DIR, 'statistics_k_%d' % nr_clusters, outfilename))
 
     # Insert here a for grid in model.grids: 
     if nr_processes > 1:
@@ -252,7 +260,7 @@ def compute_statistics_from_video_worker(dataset, samples, sstats_out,
     for sample in samples:
         label = get_sample_label(dataset, sample)
         # The path to the movie.
-        infile = os.path.join( dataset.SRC_DIR, sample.movie + dataset.SRC_EXT)
+        infile = os.path.join(dataset.SRC_DIR, sample.movie + dataset.SRC_EXT)
 
         # Still not very nice. Maybe I should create the file on the else
         # branch.
@@ -279,15 +287,121 @@ def compute_statistics_from_video_worker(dataset, samples, sstats_out,
             N += chunk_size
 
         sstats /= N  # Normalize statistics.
-        sstats_out.write(sstats, info={
-            'label': label,  # Write a function that finds the labels for a given sample and that also accepts multilabled problems
-            'nr_descs': N})
+        sstats_out.write(str(sample), sstats,
+                         info={'label': label, 'nr_descs': N})
 
+        # TODO Remove this.
+        if np.isnan(np.max(sstats)):
+            continue
+        ff = os.path.join(
+            dataset.FEAT_DIR, 'statistics_k_%d' % dataset.VOC_SIZE,
+            'stats.tmp', '%s_1_1_1_0.dat' % str(sample))
+        assert_allclose(sstats, np.fromfile(ff, dtype=np.float32))
+        
+
+def usage():
+prog_name = os.path.basename(sys.argv[0])
+    print 'Usage: %s -d dataset -m model -k nr_clusters' % prog_name
+    print
+    print 'Computes and save sufficient statistics for a specified dataset.'
+    print
+    print 'Options:'
+    print '     -d, --dataset=SRC_CFG'
+    print '         Specify the configuration of the dataset to be loaded'
+    print '         (e.g., "hollywood2_clean").'
+    print
+    print '     -i, --ip_type=IP_TYPE'
+    print '         Specify the type of descriptor (e.g., "harris.hoghof").'
+    print
+    print '     -m, --model=MODEL_TYPE'
+    print '         Specify the type of the model. There are the following'
+    print '         possibilities:'
+    print '             - "bow": bag-of-words'
+    print '             - "fv": Fisher vectors'
+    print '             - "bow_sfv": combination of bag-of-words and spatial'
+    print '                Fisher vectors'
+    print '             - "fv_sfv": combination of Fisher vectors and spatial'
+    print '                Fisher vectors.'
+    print '         Default, "fv."'
+    print
+    print '     -k, --nr_clusters=K'
+    print '         Specify the number of clusters used for the dictionary.'
+    print '         Default, 128.'
+    print
+    print '     --nr_processes=NR_PROCESSES'
+    print '         Number of cores to run the operations on. By default, this'
+    print '         is set to the number of nodes on the cluster.'
+    print
+    print "     --delta=DELTA"
+    print "         Number of frames of a chunk (e.g., 120). Default 0."
+    print
+    print "     --spacing=SPACING"
+    print "         Default 0."
+    print
+    print "     --nr_frames_to_skip=NR_FRAMES_TO_SKIP"
+    print "         When computing descriptors, pick only one frame out of"
+    print "         each (NR_FRAMES_TO_SKIP + 1) frames. Default 0."
+    # TODO
+    print '     -g --grids=GRID'
+    print '         Specify the type of spatial pyramids used. The argument'
+    print '         accepts multiple grids and should be given in the'
+    print '         following format: nx1_ny1_nt1[-nx2_ny2_nt2-...], where'
+    print '         "n[xyt]" denotes the number of cells that are used for the'
+    print '         corresponding dimension (horizontal, vertical, or'
+    print '         temporal). By default, there is no spatial pyramids used'
+    print '         (i.e., we use "1_1_1").'
+    print '         Note: multiple grids are considered only for evaluation'
+    print '         task; for the other tasks (computation, merging or'
+    print '         removing) only the first grid is considered.'
+    print
+    # TODO
+    print '     --profile'
+    print '         Profiles the code using cProfile. If the number of CPUs is'
+    print '         set larger than 1, the profiling is done only at a'
+    print '         superficial level.'
+    print
+    print '     Examples:'
+    print '     ---------'
+    # TODO
+    print '         ./compute_sstats.py -d hollywood2_clean'
 
 def main():
-    # TODO Parse argumets + usage
-    pass
-    compute_statistics('hollywood2_medium', 100, nr_processes=1)
+    try:
+        opt_pairs, args = getopt.getopt(
+            sys.argv[1:], "hd:i:m:k:o:",
+            ["help", "dataset=", "ip_type=", "model=",
+             "nr_clusters=", "nr_processes=", "delta=",
+             "spacing=", "nr_frames_to_skip=", "out_filename="])
+    except getopt.GetoptError, err:
+        print str(err)
+        usage()
+        sys.exit(1)
+
+    kwargs = {}
+    for opt, arg in opt_pairs:
+        if opt in ("-h", "--help"):
+            usage()
+            sys.exit(0)
+        elif opt in ("-d", "--dataset"):
+            src_cfg = arg
+        elif opt in ("-i", "--ip_type"):
+            kwargs['ip_type'] = arg
+        elif opt in ("-m", "--model"):
+            kwargs['model_type'] = arg
+        elif opt in ("-k", "--nr_clusters"):
+            kwargs['nr_clusters'] = int(arg)
+        elif opt in ("--nr_processes"):
+            kwargs['nr_processes'] = int(arg)
+        elif opt in ('--delta'):
+            kwargs['delta'] = int(arg)
+        elif opt in ('--spacing'):
+            kwargs['spacing'] = int(arg)
+        elif opt in ("--nr_frames_to_skip"):
+            kwargs['nr_frames_to_skip'] = int(arg)
+        elif opt in ("-o", "--out_filename"):
+            kwargs['outfilename'] = arg
+
+    compute_statistics(src_cfg, **kwargs)
 
 
 if __name__ == '__main__':
