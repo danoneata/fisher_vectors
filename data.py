@@ -223,6 +223,10 @@ def usage():
     print
     print '     -k, --nr_clusters=K'
     print '         Specify the number of clusters used for the dictionary.'
+    print
+    print '     -t, --task={"check", "merge"}'
+    print '         Perform one of the two tasks: check sufficient statistics'
+    print '         or merge them.'
 
 
 def main():
