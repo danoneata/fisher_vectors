@@ -1,11 +1,17 @@
 #!/usr/bin/python
 import cPickle
-import numpy as np
+import getopt
 import os
+import sys
+import numpy as np
+
+from dataset import Dataset
+from constants import NR_PCA_COMPONENTS
+from constants import IP_TYPE
 
 
 class SstatsMap(object):
-    """ Wrapper for the temporary data file, sufficient statistics. """
+    """ Wrapper for the temporary data files, the sufficient statistics. """
     def __init__(self, basepath):
         """ Constructor for Data object.
 
@@ -86,7 +92,7 @@ class SstatsMap(object):
 
     def check(self, filenames, len_sstats, **kwargs):
         """ Performs simple checks of the data for the given filenames.
-        
+
         Inputs
         ------
         filenames: str
@@ -112,7 +118,7 @@ class SstatsMap(object):
                     print filename
         return status
 
-    def merge(self, filenames, outfilename, **kwargs):
+    def merge(self, filenames, outfilename, len_sstats, **kwargs):
         """ Merges a specified set of filenames.
 
         Inputs
@@ -135,19 +141,19 @@ class SstatsMap(object):
 
         sstats_filename = os.path.join(outfolder, outfilename + self.data_ext)
         labels_filename = os.path.join(outfolder, 'labels_'
-                                       + outfilename + self.data_ext)
+                                       + outfilename + self.info_ext)
 
         sstats_file = open(sstats_filename, 'a')
         labels_file = open(labels_filename, 'w')
 
         all_labels = []
-        for sample in samples:
-            sstats = self.read(str(sample))
-            label = self.read_info(str(sample))['label']
+        for filename in filenames:
+            sstats = self.read(filename)
+            label = self.read_info(filename)['label']
 
             nr_elems = len(sstats)
-            nr_of_slices = nr_elems / len_sstat
-            assert nr_elems % len_sstat == 0, ("The length of the sufficient"
+            nr_of_slices = nr_elems / len_sstats
+            assert nr_elems % len_sstats == 0, ("The length of the sufficient"
                                               "statistics is not a multiple of"
                                               "the length of the descriptor.")
 
@@ -159,8 +165,96 @@ class SstatsMap(object):
         labels_file.close()
 
 
+def merge_given_dataset(src_cfg, nr_clusters):
+    """ Merges the statistics and the labels for the train and the test set.
+
+    """
+    dataset = Dataset(src_cfg, ip_type=IP_TYPE)
+
+    basepath = os.path.join(dataset.FEAT_DIR,
+                            'statistics_k_%d' % nr_clusters,
+                            'new_stats.old')
+    data = SstatsMap(basepath)
+
+    tr_samples = dataset.get_data('train')[0]
+    str_tr_samples = list(set([str(sample) for sample in tr_samples]))
+    data.merge(str_tr_samples, 'train', nr_clusters +
+               2 * nr_clusters * NR_PCA_COMPONENTS)
+
+    te_samples = dataset.get_data('test')[0]
+    str_te_samples = list(set([str(sample) for sample in te_samples]))
+    data.merge(str_te_samples, 'test', nr_clusters +
+               2 * nr_clusters * NR_PCA_COMPONENTS)
+
+
+def check_given_dataset(src_cfg, nr_clusters):
+    """ Checks the train and the test samples. """
+    dataset = Dataset(src_cfg, ip_type=IP_TYPE)
+
+    basepath = os.path.join(dataset.FEAT_DIR,
+                            'statistics_k_%d' % nr_clusters,
+                            'new_stats.old')
+    data = SstatsMap(basepath)
+
+    tr_samples = dataset.get_data('train')[0]
+    str_tr_samples = list(set([str(sample) for sample in tr_samples]))
+    tr_status = data.check(str_tr_samples, nr_clusters +
+                           2 * nr_clusters * NR_PCA_COMPONENTS)
+
+    te_samples = dataset.get_data('test')[0]
+    str_te_samples = list(set([str(sample) for sample in te_samples]))
+    te_status = data.check(str_te_samples, nr_clusters +
+                           2 * nr_clusters * NR_PCA_COMPONENTS)
+
+    if tr_status and te_status:
+        print 'Checking done. Everything ok.'
+
+
+def usage():
+    prog_name = os.path.basename(sys.argv[0])
+    print 'Usage: %s -d dataset -k nr_clusters' % prog_name
+    print
+    print 'Computes and save sufficient statistics for a specified dataset.'
+    print
+    print 'Options:'
+    print '     -d, --dataset=SRC_CFG'
+    print '         Specify the configuration of the dataset to be loaded'
+    print '         (e.g., "hollywood2_clean").'
+    print
+    print '     -k, --nr_clusters=K'
+    print '         Specify the number of clusters used for the dictionary.'
+
+
 def main():
-    pass
+    try:
+        opt_pairs, args = getopt.getopt(
+            sys.argv[1:], "hd:k:t:",
+            ["help", "dataset=", "nr_clusters=", "task="])
+    except getopt.GetoptError, err:
+        print str(err)
+        usage()
+        sys.exit(1)
+
+    for opt, arg in opt_pairs:
+        if opt in ("-h", "--help"):
+            usage()
+            sys.exit(0)
+        elif opt in ("-d", "--dataset"):
+            src_cfg = arg
+        elif opt in ("-k", "--nr_clusters"):
+            nr_clusters = int(arg)
+        elif opt in ("-t", "--task"):
+            task = arg
+
+    if task not in ("check", "merge"):
+        print "Unknown task."
+        usage()
+        sys.exit(1)
+
+    if task == "check":
+        check_given_dataset(src_cfg, nr_clusters)
+    elif task == "merge":
+        merge_given_dataset(src_cfg, nr_clusters)
 
 
 if __name__ == '__main__':
