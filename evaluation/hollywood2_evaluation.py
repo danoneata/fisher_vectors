@@ -4,6 +4,7 @@ import numpy as np
 from sklearn import svm
 from sklearn.grid_search import GridSearchCV
 from sklearn.cross_validation import StratifiedShuffleSplit
+from sklearn.preprocessing import LabelBinarizer
 
 from .base_evaluation import BaseEvaluation
 import result_file_functions
@@ -33,12 +34,15 @@ class Hollywood2Evaluation(BaseEvaluation):
         Kxx: array [n_samples, n_samples]
             Precomputed kernel matrix of the training data.
 
-        cx: array [n_samples, n_classes]
-            Labels matrix. Element cx[i, j] is 1 if sample `i` belongs to class
-            `j`; otherwise it is -1. We preferred this encoding because some
-            sample have multiple labels.
-
+        cx: list of tuples
+            Labels array. Each tuple may contain one or multiple labels.
+            Hollywood2 is a multi-label dataset.
         """
+        # Convert labels to a label matrix. Element cx[i, j] is 1 if sample `i`
+        # belongs to class `j`; otherwise it is -1.
+        self.lb = LabelBinarizer(pos_label=1, neg_label=-1)
+        cx = self.lb.fit_transform(cx)
+
         self.nr_classes = cx.shape[1]
         self.clf = []
 
@@ -58,16 +62,18 @@ class Hollywood2Evaluation(BaseEvaluation):
                              score_func=average_precision,
                              cv=splits, n_jobs=4))
             self.clf[ii].fit(Kxx, labels)
+        return self
 
     def score(self, Kyx, cy):
         """ Returns the mean average precision score. """
+        cy = self.lb.transform(cy)
         average_precisions = np.zeros(self.nr_classes)
         for ii in xrange(self.nr_classes):
             true_labels = cy[:, ii]
             predicted_values = self.clf[ii].predict_proba(Kyx)[:, 1]
             average_precisions[ii] = average_precision(
                 true_labels, predicted_values)
-        return np.mean(average_precisions)
+        return np.mean(average_precisions) * 100
 
     @classmethod
     def is_evaluation_for(cls, dataset_to_evaluate):

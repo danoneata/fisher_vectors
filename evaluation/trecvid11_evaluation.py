@@ -4,6 +4,7 @@ from sklearn import svm
 from ipdb import set_trace
 
 from .base_evaluation import BaseEvaluation
+from utils import tuple_labels_to_list_labels
 import result_file_functions as rff
 
 
@@ -18,6 +19,7 @@ class TrecVid11Evaluation(BaseEvaluation):
         assert scenario in ('multiclass', 'versus_null')
 
     def fit(self, Kxx, cx):
+        cx = tuple_labels_to_list_labels(cy)
         if self.scenario == 'multiclass':
             self._fit_one_vs_one(Kxx, cx)
         elif self.scenario == 'versus_null':
@@ -25,12 +27,14 @@ class TrecVid11Evaluation(BaseEvaluation):
         return self
 
     def score(self, Kyx, cy):
+        cy = tuple_labels_to_list_labels(cy)
         if self.scenario == 'multiclass':
             return self._score_one_vs_one(Kyx, cy)
         elif self.scenario == 'versus_null':
             return self._score_one_vs_rest(Kyx, cy)
 
     def predict(self, Kyx, cy):
+        cy = tuple_labels_to_list_labels(cy)
         if self.scenario == 'multiclass':
             return self._predict_one_vs_one(Kyx, cy)
         return None

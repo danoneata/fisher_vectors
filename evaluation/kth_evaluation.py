@@ -6,6 +6,7 @@ from sklearn import svm
 from sklearn.grid_search import GridSearchCV
 from sklearn.cross_validation import StratifiedShuffleSplit
 from sklearn.metrics import zero_one_score
+from utils import tuple_labels_to_list_labels
 
 from .base_evaluation import BaseEvaluation
 
@@ -23,6 +24,7 @@ class KTHEvaluation(BaseEvaluation):
         weight across a logarithmic scale.
 
         """
+        cx = tuple_labels_to_list_labels(cx)
         my_svm = svm.SVC(kernel='precomputed')
 
         c_values = np.power(3.0, np.arange(-2, 8))
@@ -38,6 +40,7 @@ class KTHEvaluation(BaseEvaluation):
 
     def score(self, Kyx, cy):
         """ Return the accuracy score / zero-one score. """
+        cy = tuple_labels_to_list_labels(cy)
         return self.clf.score(Kyx, cy)
 
     @classmethod
