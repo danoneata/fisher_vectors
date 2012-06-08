@@ -32,13 +32,28 @@ class FVSFVModel(FVModel, SFVModel):
     -----
 
     """
-    def __init__(self, K, grids):
-        super(FVSFVModel, self).__init__(K, grids)
+    def __init__(self, gmm):
+        super(FVSFVModel, self).__init__(gmm)
         self.is_spatial_model = True
 
     def __str__(self):
+        # TODO
         ss = super(FVSFVModel, self).__str__()
         return 'FV-SFV ' + ss
+
+    def compute_kernels(self, tr_file_paths, te_file_paths,
+                        tr_spatial_file_paths, te_spatial_file_paths):
+        """ Computes the kernels for the FV-SFV model. It computes kernel
+        products for both appearance features and spatial features. The L2
+        normalization is done on the long concatenated feature vector.
+
+        """
+        super(FVSFVModel, self).compute_kernels(tr_file_paths, te_file_paths)
+        self._init_normalizations()
+        self._compute_kernels(tr_file_paths, te_file_paths)
+        self._compute_spatial_kernels(
+            tr_spatial_file_paths, te_spatial_file_paths)
+        self._L2_normalize_kernels()
 
     @classmethod
     def is_model_for(cls, type_model):
@@ -46,25 +61,3 @@ class FVSFVModel(FVModel, SFVModel):
             return True
         else:
             return False
-
-    def compute_kernels(self, dataset):
-        """ Computes the kernels for the FV-SFV model. It computes kernel
-        products for both appearance features and spatial features. The L2
-        normalization is done on the long concatenated feature vector.
-
-        """
-        super(FVSFVModel, self)._init_kernels(dataset)
-        super(FVSFVModel, self)._compute_kernels(dataset, FVModel._compute_features)
-        super(FVSFVModel, self)._compute_kernels(dataset, self._compute_spatial_features, 'spatial_')
-        self._L2_normalize_kernels()
-        
-    def _compute_features(self, ss, gmm, fn):
-        """ Computes the features for the FV-SFV model. There are two kinds of 
-        features used: the appearance and the spatial, so appropriate functions
-        are called for each of these.
-
-        """
-        if 'spatial' in fn:
-            return super(FVSFVModel, self)._compute_spatial_features(ss, gmm)
-        else:
-            return super(FVSFVModel, self)._compute_features(ss, gmm)
