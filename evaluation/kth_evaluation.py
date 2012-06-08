@@ -34,6 +34,7 @@ class KTHEvaluation(BaseEvaluation):
             my_svm, tuned_parameters, score_func=zero_one_score,
             cv=splits, n_jobs=4)
         self.clf.fit(Kxx, cx)
+        return self
 
     def score(self, Kyx, cy):
         """ Return the accuracy score / zero-one score. """

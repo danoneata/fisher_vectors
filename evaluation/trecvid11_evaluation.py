@@ -12,17 +12,28 @@ class TrecVid11Evaluation(BaseEvaluation):
     average precision of each class against the background class NULL.
 
     """
-    def __init__(self):
+    def __init__(self, scenario='multiclass'):
         self.null_class_idx = 15
+        self.scenario = scenario
+        assert scenario in ('multiclass', 'versus_null')
 
     def fit(self, Kxx, cx):
-        self._fit_one_vs_one(Kxx, cx)
+        if self.scenario == 'multiclass':
+            self._fit_one_vs_one(Kxx, cx)
+        elif self.scenario == 'versus_null':
+            self._fit_one_vs_rest(Kxx, cx)
+        return self
 
     def score(self, Kyx, cy):
-        return self._score_one_vs_one(Kyx, cy)
+        if self.scenario == 'multiclass':
+            return self._score_one_vs_one(Kyx, cy)
+        elif self.scenario == 'versus_null':
+            return self._score_one_vs_rest(Kyx, cy)
 
     def predict(self, Kyx, cy):
-        return self._predict_one_vs_one(Kyx, cy)
+        if self.scenario == 'multiclass':
+            return self._predict_one_vs_one(Kyx, cy)
+        return None
 
     def _fit_one_vs_rest(self, Kxx, cx):
         """ Fits a one-vs-null SVM classifier. """
@@ -199,8 +210,8 @@ class TrecVid11Evaluation(BaseEvaluation):
         return best_C
 
     @classmethod
-    def is_evaluation_for(cls, type_evaluation):
-        if type_evaluation == 'trecvid11':
+    def is_evaluation_for(cls, dataset_to_evaluate):
+        if dataset_to_evaluate == 'trecvid11':
             return True
         else:
             return False
