@@ -7,6 +7,11 @@ from yael import yael
 from yael.yael import fvec_new, fvec_to_numpy, numpy_to_fvec_ref
 from yael.yael import gmm_compute_p, GMM_FLAGS_W
 
+from utils import standardize
+from utils import power_normalize
+from utils import compute_L2_normalization
+
+
 class SFVModel(BaseModel):
     """ Spatial Fisher vector model.
 
@@ -36,16 +41,16 @@ class SFVModel(BaseModel):
     uses the ``spatial'' methods.
 
     """
-    def __init__(self, K, grids):
-        super(SFVModel, self).__init__(K, grids)
-        self.mm = np.array([0.5, 0.5, 0.5])
-        self.S = np.array([1. / 12, 1. / 12, 1. / 12])
+    def __init__(self, gmm):
+        super(SFVModel, self).__init__(gmm)
 
     def __str__(self):
+        # TODO
         ss = super(SFVModel, self).__str__()
         return 'FV-SFV ' + ss
 
-    def _compute_spatial_statistics(self, xx, ll, gmm):
+    @staticmethod
+    def descs_to_spatial_sstats(xx, ll, gmm):
         """ Computes spatial statistics from descriptors and their position.
 
         Inputs
@@ -71,10 +76,12 @@ class SFVModel(BaseModel):
 
         """
         N = ll.shape[0] 
+        K = gmm.k
+
         # Compute posterior probabilities using yael.
-        Q_yael = fvec_new(N * self.K)
+        Q_yael = fvec_new(N * K)
         gmm_compute_p(N, numpy_to_fvec_ref(xx), gmm, Q_yael, GMM_FLAGS_W)
-        Q = fvec_to_numpy(Q_yael, N * self.K).reshape(N, self.K)
+        Q = fvec_to_numpy(Q_yael, N * K).reshape(N, K)
         yael.free(Q_yael)
         # Compute statistics.
         Q_sum = sum(Q, 0) / N                     # 1xK
@@ -82,7 +89,8 @@ class SFVModel(BaseModel):
         Q_ll_2 = dot(Q.T, ll ** 2).flatten() / N  # 1x3K 
         return np.array(hstack((Q_sum, Q_ll, Q_ll_2)), dtype=np.float32)
 
-    def _compute_spatial_features(self, ss, gmm):
+    @staticmethod
+    def spatial_sstats_to_spatial_features(ss, gmm):
         """ Computes spatial features from spatial sufficient statistics.
 
         Inputs
@@ -102,13 +110,19 @@ class SFVModel(BaseModel):
 
         """
         K = gmm.k
-        mm = self.mm[newaxis, :, newaxis]             # 1x3x1
-        S = self.S[newaxis, :, newaxis]               # 1x3x1
+
+        mm = np.array([0.5, 0.5, 0.5])
+        S = np.array([1. / 12, 1. / 12, 1. / 12])
+
+        mm = mm[newaxis, :, newaxis]             # 1x3x1
+        S = S[newaxis, :, newaxis]               # 1x3x1
         ss = ss.reshape(-1, K + 2 * 3 * K)
+
         N = ss.shape[0]
         Q_sum = ss[:, :K]                             # NxK
         Q_ll = ss[:, K:K + 3 * K]                     # NxKD
         Q_ll_2 = ss[:, K + 3 * K:K + 2 * 3 * K]       # NxKD
+
         d_mm = Q_ll - (Q_sum[:, newaxis] * mm).reshape(N, 3 * K, order='F')
         d_S = (
             - Q_ll_2
@@ -117,6 +131,29 @@ class SFVModel(BaseModel):
             + 2 * Q_ll * tile(squeeze(mm)[newaxis], K))
         xx = hstack((d_mm, d_S))
         return xx
+
+    def _compute_spatial_kernels(self, train_paths, test_paths):
+        for fn_train, fn_test in zip(train_paths, test_paths):
+            # Process train set.
+            ss = np.fromfile(fn_train, dtype=np.float32)
+
+            xx = self.spatial_sstats_to_spatial_features(ss, self.gmm)
+            xx, mu, sigma = standardize(xx)
+            xx = power_normalize(xx, 0.5)
+            self.Zx += compute_L2_normalization(xx)
+
+            self.Kxx += dot(xx, xx.T)
+
+            # Process test set.
+            ss = np.fromfile(fn_test, dtype=np.float32)
+
+            yy = self.spatial_sstats_to_spatial_features(ss, self.gmm)
+            yy = standardize(yy, mu, sigma)[0]
+            yy = power_normalize(yy, 0.5)
+            self.Zy += compute_L2_normalization(yy)
+
+            self.Kyx += dot(yy, xx.T)
+
 
     @classmethod
     def is_model_for(cls, type_model):

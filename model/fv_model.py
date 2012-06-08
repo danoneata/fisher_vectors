@@ -1,15 +1,25 @@
 from ipdb import set_trace
+
 import numpy as np
-from numpy import abs, dot, hstack, mean, newaxis, sign, sum, sqrt, std, zeros
+from numpy import dot
+from numpy import newaxis
+from numpy import hstack
+from numpy import sqrt
+from numpy import zeros
 
 from .base_model import BaseModel
-from transform_sstats import sstats_to_fv
+
 from yael import yael
 from yael.yael import fvec_new, fvec_to_numpy, numpy_to_fvec_ref
 from yael.yael import gmm_compute_p, GMM_FLAGS_W
 
+from utils import standardize
+from utils import power_normalize
+from utils import compute_L2_normalization
+
 
 class FVModel(BaseModel):
+    # TODO Finish this.
     """ Fisher vectors model.
 
     Extends the class BaseModel and implements the specific compute_features
@@ -28,18 +38,19 @@ class FVModel(BaseModel):
     --------
 
     """
-    def __init__(self, K, grids):
-        super(FVModel, self).__init__(K, grids)
+    def __init__(self, gmm):
+        super(FVModel, self).__init__(gmm)
         self.is_spatial_model = False
 
     def __str__(self):
+        # TODO
         ss = super(FVModel, self).__str__()
         return 'FV ' + ss
 
     @staticmethod
-    def _compute_statistics(xx, gmm):
+    def descs_to_sstats(xx, gmm):
         """ Converts the descriptors to sufficient statistics.
-        
+
         Inputs
         ------
         xx: array [nr_descs, nr_dimensions]
@@ -69,62 +80,89 @@ class FVModel(BaseModel):
         Q_xx_2 = dot(Q.T, xx ** 2).flatten() / N  # 1xKD
         return np.array(hstack((Q_sum, Q_xx, Q_xx_2)), dtype=np.float32)
 
-    def compute_kernels(self, dataset):
-        self._init_kernels(dataset)
-        self._compute_kernels(dataset, sstats_to_fv)
-        self._L2_normalize_kernels()
-        return self.Kxx, self.Kyx
+    @staticmethod
+    def sstats_to_features(ss, gmm):
+        """ Converts sufficient statistics into standard Fisher vectors.
 
-    def _init_kernels(self, dataset):
-        super(FVModel, self)._init_kernels(dataset)
+        Inputs
+        ------
+        ss: array [N * (K + 2 * D * K), ]
+            Sufficient statistics.
+
+        gmm: instance of the yael object, gmm
+            Gaussian mixture model.
+
+        Output
+        ------
+        fv: array [N, K + 2 * D * K]
+            Fisher vectors for each of the N sufficient statistics.
+
+        """
+        K = gmm.k
+        D = gmm.d
+        ss = ss.reshape(-1, K + 2 * K * D)
+        N = ss.shape[0]
+
+        # Get parameters and reshape them.
+        pi = yael.fvec_to_numpy(gmm.w, K)            # 1xK
+        mu = (yael.fvec_to_numpy(gmm.mu, K * D)
+              .reshape(D, K, order='F')[newaxis])    # 1xDxK
+        sigma = (yael.fvec_to_numpy(gmm.sigma, K * D).
+                 reshape(D, K, order='F')[newaxis])  # 1xDxK
+
+        # Get each part of the sufficient statistics.
+        Q_sum = ss[:, :K]                            # NxK (then Nx1xK)
+        Q_xx = ss[:, K:K + D * K]                    # NxKD
+        Q_xx_2 = ss[:, K + D * K:K + 2 * D * K]      # NxKD
+
+        # Compute the gradients.
+        d_pi = Q_sum - pi
+        d_mu = Q_xx - (Q_sum[:, newaxis] * mu).reshape(N, D * K, order='F')
+        d_sigma = (
+            - Q_xx_2
+            - (Q_sum[:, newaxis] * mu ** 2).reshape(N, D * K, order='F')
+            + (Q_sum[:, newaxis] * sigma).reshape(N, D * K, order='F')
+            + 2 * Q_xx * mu.reshape(1, K * D, order='F'))
+
+        # Glue everything together.
+        fv = hstack((d_pi, d_mu, d_sigma))
+        return fv
+
+    def compute_kernels(self, tr_file_paths, te_file_paths):
+        """ Computes kernel matrices `Kxx` and `Kyx' from the given train and
+        test files.
+
+        """
+        super(FVModel, self).compute_kernels(tr_file_paths, te_file_paths)
+        self._init_normalizations()
+        self._compute_kernels(tr_file_paths, te_file_paths)
+        self._L2_normalize_kernels()
+
+    def _init_normalizations(self):
         self.Zx = zeros(self.Nx)
         self.Zy = zeros(self.Ny)
 
-    def _compute_kernels(self, dataset, _compute_features, prefix=''):
-        """ Separated function to reuse it more easily. """
-        train_paths, test_paths = self._get_statistics_paths(dataset, prefix)
+    def _compute_kernels(self, train_paths, test_paths):
         for fn_train, fn_test in zip(train_paths, test_paths):
             # Process train set.
             ss = np.fromfile(fn_train, dtype=np.float32)
-            xx = _compute_features(ss, self.gmm)
-            xx, mu, sigma = self._standardize(xx)
-            xx = self._power_normalize(xx, 0.5)
-            #xx = self._L2_normalize(xx)
-            self.Zx += self._compute_L2_normalization(xx)
+
+            xx = self.sstats_to_features(ss, self.gmm)
+            xx, mu, sigma = standardize(xx)
+            xx = power_normalize(xx, 0.5)
+            self.Zx += compute_L2_normalization(xx)
+
             self.Kxx += dot(xx, xx.T)
+
             # Process test set.
             ss = np.fromfile(fn_test, dtype=np.float32)
-            yy = _compute_features(ss, self.gmm)
-            yy = self._standardize(yy, mu, sigma)[0]
-            yy = self._power_normalize(yy, 0.5)
-            #yy = self._L2_normalize(yy)
-            self.Zy += self._compute_L2_normalization(yy)
+
+            yy = self.sstats_to_features(ss, self.gmm)
+            yy = standardize(yy, mu, sigma)[0]
+            yy = power_normalize(yy, 0.5)
+            self.Zy += compute_L2_normalization(yy)
+
             self.Kyx += dot(yy, xx.T)
-
-    def _standardize(self, xx, mu=None, sigma=None):
-        """ Returns the standardized data, i.e., zero mean and unit variance
-        data, and the corresponding mean and standard deviation.
-
-        """
-        if mu is None or sigma is None:
-            mu = mean(xx, 0)
-            sigma = std(xx - mu, 0)
-        return (xx - mu) / sigma, mu, sigma
-
-    def _power_normalize(self, xx, alpha):
-        """ Computes a alpha-power normalization for the matrix xx. """
-        return sign(xx) * abs(xx) ** alpha
-
-    def _compute_L2_normalization(self, xx):
-        """ Input: a NxD dimensional matrix. Returns the sum over lines, hence
-        a N dimensional vector.
-
-        """
-        return sum(xx * xx, 1)
-
-    def _L2_normalize(self, xx):
-        Zx = self._compute_L2_normalization(xx)
-        return xx / sqrt(Zx[:, newaxis])
 
     def _L2_normalize_kernels(self):
         # L2-normalize kernels.

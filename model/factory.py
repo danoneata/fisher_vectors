@@ -1,6 +1,6 @@
 from .base_model import BaseModel
 
-def Model(type_model, K, grids=[(1,1,1)]):
+def Model(type_model, gmm, **kwargs):
     """ Factory function that instantiates the object with the corresponding
     class.
 
@@ -8,5 +8,5 @@ def Model(type_model, K, grids=[(1,1,1)]):
     classes = BaseModel.__inheritors__
     for cls in classes[BaseModel]:
         if cls.is_model_for(type_model):
-            return cls(K, grids)
+            return cls(gmm, **kwargs)
     raise ValueError
