@@ -41,7 +41,7 @@ class KTHEvaluation(BaseEvaluation):
     def score(self, Kyx, cy):
         """ Return the accuracy score / zero-one score. """
         cy = tuple_labels_to_list_labels(cy)
-        return self.clf.score(Kyx, cy)
+        return self.clf.score(Kyx, cy) * 100
 
     @classmethod
     def is_evaluation_for(cls, dataset_to_evaluate):

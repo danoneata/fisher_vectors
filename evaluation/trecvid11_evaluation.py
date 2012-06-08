@@ -93,7 +93,7 @@ class TrecVid11Evaluation(BaseEvaluation):
             print "Score for class %d as positive is %2.4f MAP." % (
                 ii, average_precision[ii])
 
-        return mean(average_precision)
+        return mean(average_precision) * 100
 
     def _crossvalidate_C_one_vs_rest(self, K, cc, idx_clf):
         # TODO Try to avoid duplication of some of this code.
@@ -163,7 +163,7 @@ class TrecVid11Evaluation(BaseEvaluation):
         cy = np.array(cy)
         good_idxs = cy != self.null_class_idx
         K_good_idxs = np.ix_(good_idxs, self.cx_idxs)
-        return self.clf.score(Kyx[K_good_idxs], cy[good_idxs])
+        return self.clf.score(Kyx[K_good_idxs], cy[good_idxs]) * 100
 
     def _predict_one_vs_one(self, Kyx, cy):
         """ Returns true labels and predicted labels. This is implemented only
