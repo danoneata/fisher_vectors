@@ -143,6 +143,10 @@ class SstatsMap(object):
         labels_filename = os.path.join(outfolder, 'labels_'
                                        + outfilename + self.info_ext)
 
+        # If sstats_file exists delete it.
+        if os.path.exists(sstats_filename):
+            os.remove(sstats_filename)
+
         sstats_file = open(sstats_filename, 'a')
         labels_file = open(labels_filename, 'w')
 
@@ -165,26 +169,26 @@ class SstatsMap(object):
         labels_file.close()
 
 
-def merge_given_dataset(src_cfg, nr_clusters):
+def merge_given_dataset(src_cfg, nr_clusters, **kwargs):
     """ Merges the statistics and the labels for the train and the test set.
 
     """
     dataset = Dataset(src_cfg, ip_type=IP_TYPE)
 
     basepath = os.path.join(dataset.FEAT_DIR,
-                            'statistics_k_%d' % nr_clusters,
-                            'new_stats.old')
+                            'statistics_k_%d' % nr_clusters, 'stats.tmp')
+    outfolder = os.path.join(dataset.FEAT_DIR, 'statistics_k_%d' % nr_clusters) 
     data = SstatsMap(basepath)
 
     tr_samples = dataset.get_data('train')[0]
     str_tr_samples = list(set([str(sample) for sample in tr_samples]))
     data.merge(str_tr_samples, 'train', nr_clusters +
-               2 * nr_clusters * NR_PCA_COMPONENTS)
+               2 * nr_clusters * NR_PCA_COMPONENTS, outfolder=outfolder)
 
     te_samples = dataset.get_data('test')[0]
     str_te_samples = list(set([str(sample) for sample in te_samples]))
     data.merge(str_te_samples, 'test', nr_clusters +
-               2 * nr_clusters * NR_PCA_COMPONENTS)
+               2 * nr_clusters * NR_PCA_COMPONENTS, outfolder=outfolder)
 
 
 def check_given_dataset(src_cfg, nr_clusters):
@@ -227,18 +231,23 @@ def usage():
     print '     -t, --task={"check", "merge"}'
     print '         Perform one of the two tasks: check sufficient statistics'
     print '         or merge them.'
+    print
+    print '     -o, --out_folder=PATH'
+    print '         Option only for "merge" task. Location where the merged'
+    print '         files will be stored. Optional parameter.'
 
 
 def main():
     try:
         opt_pairs, args = getopt.getopt(
-            sys.argv[1:], "hd:k:t:",
-            ["help", "dataset=", "nr_clusters=", "task="])
+            sys.argv[1:], "hd:k:t:o:",
+            ["help", "dataset=", "nr_clusters=", "task=", "out_folder="])
     except getopt.GetoptError, err:
         print str(err)
         usage()
         sys.exit(1)
 
+    kwargs = {}
     for opt, arg in opt_pairs:
         if opt in ("-h", "--help"):
             usage()
@@ -249,6 +258,8 @@ def main():
             nr_clusters = int(arg)
         elif opt in ("-t", "--task"):
             task = arg
+        elif opt in ("-o", "--out_folder"):
+            kwargs["outfolder"] = arg
 
     if task not in ("check", "merge"):
         print "Unknown task."
@@ -258,7 +269,7 @@ def main():
     if task == "check":
         check_given_dataset(src_cfg, nr_clusters)
     elif task == "merge":
-        merge_given_dataset(src_cfg, nr_clusters)
+        merge_given_dataset(src_cfg, nr_clusters, **kwargs)
 
 
 if __name__ == '__main__':
