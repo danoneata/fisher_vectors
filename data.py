@@ -184,11 +184,13 @@ def merge_given_dataset(src_cfg, nr_clusters, **kwargs):
     str_tr_samples = list(set([str(sample) for sample in tr_samples]))
     data.merge(str_tr_samples, 'train', nr_clusters +
                2 * nr_clusters * NR_PCA_COMPONENTS, outfolder=outfolder)
+    print "Merged train data."
 
     te_samples = dataset.get_data('test')[0]
     str_te_samples = list(set([str(sample) for sample in te_samples]))
     data.merge(str_te_samples, 'test', nr_clusters +
                2 * nr_clusters * NR_PCA_COMPONENTS, outfolder=outfolder)
+    print "Merged test data."
 
 
 def check_given_dataset(src_cfg, nr_clusters):
