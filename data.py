@@ -90,7 +90,7 @@ class SstatsMap(object):
         info_file.close()
         return info
 
-    def check(self, filenames, len_sstats, **kwargs):
+    def check(self, filenames, len_sstats):
         """ Performs simple checks of the data for the given filenames.
 
         Inputs
@@ -193,13 +193,13 @@ def merge_given_dataset(src_cfg, nr_clusters, **kwargs):
     print "Merged test data."
 
 
-def check_given_dataset(src_cfg, nr_clusters):
+def check_given_dataset(src_cfg, nr_clusters, **kwargs):
     """ Checks the train and the test samples. """
     dataset = Dataset(src_cfg, ip_type=IP_TYPE)
 
     basepath = os.path.join(dataset.FEAT_DIR,
                             'statistics_k_%d' % nr_clusters,
-                            'new_stats.old')
+                            'stats.tmp')
     data = SstatsMap(basepath)
 
     tr_samples = dataset.get_data('train')[0]
