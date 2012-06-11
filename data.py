@@ -64,6 +64,13 @@ class SstatsMap(object):
             cPickle.dump(info, info_file)
             info_file.close()
 
+    def write_info(self, filename, info):
+        """ Writes only information data. """
+        complete_path = os.path.join(self.basepath, filename + self.info_ext)
+        ff = open(complete_path, 'w')
+        pickle.dump(info, ff)
+        ff.close()
+
     def touch(self, filename):
         """ Creates a file with the given filename. """
         data_file = os.path.join(self.basepath, filename + self.data_ext)
