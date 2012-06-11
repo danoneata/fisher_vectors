@@ -125,8 +125,9 @@ def get_time_intervals(start, end, delta, spacing):
         begin_frames = [start]
         end_frames = [end]
     else:
-        begin_frames = range(start, end - delta, delta * spacing)
-        end_frames = range(start + delta, end, delta * spacing)
+        begin_frames = np.array(range(start, end, delta * spacing))
+        end_frames = np.array(range(delta, end + delta, delta * spacing))
+        end_frames = np.minimum(end_frames, end)
     return begin_frames, end_frames
 
 
@@ -137,7 +138,7 @@ def get_slice_number(current_frame, begin_frames, end_frames):
     """
     for ii, (begin_frame, end_frame) in enumerate(zip(begin_frames,
                                                       end_frames)):
-        if begin_frame <= current_frame <= end_frame:
+        if begin_frame <= current_frame < end_frame:
             return ii
     # return -1
     # Why did you do this, past Dan? Maybe future Dan will explain.
