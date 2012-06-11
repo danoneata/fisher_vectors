@@ -177,8 +177,13 @@ def compute_statistics(src_cfg, **kwargs):
     dataset.VOC_SIZE = nr_clusters
 
     model_type = kwargs.get('model_type', 'fv')
+    worker_type = kwargs.get('worker_type', 'normal')
 
-    worker = kwargs.get('worker', compute_statistics_from_video_worker)
+    if worker_type == 'normal':
+        worker = compute_statistics_from_video_worker
+    elif worker_type == 'per_slice':
+        from per_slice.compute_sstats_per_slice import compute_statistics_worker
+        worker = compute_statistics_worker
 
     fn_pca = os.path.join(dataset.FEAT_DIR, 'pca', 'pca_64.pkl')
     pca = kwargs.get('pca', load_pca(fn_pca))
@@ -336,6 +341,12 @@ def usage():
     print "     --nr_frames_to_skip=NR_FRAMES_TO_SKIP"
     print "         When computing descriptors, pick only one frame out of"
     print "         each (NR_FRAMES_TO_SKIP + 1) frames. Default 0."
+    print
+    print '     -w, --worker={"normal", "per_slice"}'
+    print '         The name of the worker that performs the sufficient'
+    print '         statistics computation. The "per slice" worker compute'
+    print '         multiple sufficient statistics per video.'
+    print
     # TODO
     print '     -g --grids=GRID'
     print '         Specify the type of spatial pyramids used. The argument'
@@ -364,10 +375,10 @@ def usage():
 def main():
     try:
         opt_pairs, args = getopt.getopt(
-            sys.argv[1:], "hd:i:m:k:o:",
+            sys.argv[1:], "hd:i:m:k:o:w:",
             ["help", "dataset=", "ip_type=", "model=",
              "nr_clusters=", "nr_processes=", "delta=",
-             "spacing=", "nr_frames_to_skip=", "out_filename="])
+             "spacing=", "nr_frames_to_skip=", "out_filename=", "worker="])
     except getopt.GetoptError, err:
         print str(err)
         usage()
@@ -396,6 +407,8 @@ def main():
             kwargs['nr_frames_to_skip'] = int(arg)
         elif opt in ("-o", "--out_filename"):
             kwargs['outfilename'] = arg
+        elif opt in ("w", "--worker"):
+            kwargs['worker_type'] = arg
 
     compute_statistics(src_cfg, **kwargs)
 
