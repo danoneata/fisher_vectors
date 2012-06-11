@@ -1,13 +1,7 @@
 import os
 import numpy as np
 
-
-DESCS_LEN = {
-    'mbh': 192,
-    'hog': 96,
-    'hof': 108,
-    'hoghof': 96 + 108,
-    'all': 96 + 108 + 192}
+from constants import DESCS_LEN
 
 
 def load_subsample_descriptors(dataset):
