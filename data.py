@@ -68,7 +68,7 @@ class SstatsMap(object):
         """ Writes only information data. """
         complete_path = os.path.join(self.basepath, filename + self.info_ext)
         ff = open(complete_path, 'w')
-        pickle.dump(info, ff)
+        cPickle.dump(info, ff)
         ff.close()
 
     def touch(self, filename):
