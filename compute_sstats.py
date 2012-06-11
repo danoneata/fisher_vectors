@@ -22,6 +22,8 @@ from preprocess.pca import load_pca
 from preprocess.gmm import load_gmm
 from preprocess.subset import DESCS_LEN
 
+from utils.profile import profile
+
 from vidbase.vidplayer import get_video_infos
 
 
@@ -49,7 +51,7 @@ def parse_ip_type(ip_type):
     stride = re.findall(pattern_stride, detector)[0]
     track_length = re.findall(pattern_track_length, descriptor)[0]
     descriptor_type = re.findall(pattern_desc_type, descriptor)[0]
-     
+
     return stride, track_length, descriptor_type
 
 
@@ -105,7 +107,8 @@ def read_descriptors_from_video(infile, **kwargs):
         stdout=subprocess.PIPE, bufsize=1)
     while True:
         data = dense_tracks.stdout.read(
-            FLOAT_SIZE * (descriptor_length + position_length) * nr_descriptors)
+            FLOAT_SIZE * (descriptor_length + position_length) *
+            nr_descriptors)
         if not data:
             break
         formated_data = np.fromstring(data, dtype=np.float32).reshape(
@@ -114,7 +117,7 @@ def read_descriptors_from_video(infile, **kwargs):
 
 
 def get_time_intervals(start, end, delta, spacing):
-    """ Returns the begining and end frames for chunking the video into 
+    """ Returns the begining and end frames for chunking the video into
     pieces of delta frames that are equally spaced.
 
     """
@@ -136,7 +139,7 @@ def get_slice_number(current_frame, begin_frames, end_frames):
                                                       end_frames)):
         if begin_frame <= current_frame <= end_frame:
             return ii
-    # return -1  
+    # return -1
     # Why did you do this, past Dan? Maybe future Dan will explain.
     # I still have no clue today, on the 6th of June.
     raise Exception('Frame number not in the specified intervals.')
@@ -159,6 +162,7 @@ def get_sample_label(dataset, sample):
     return label
 
 
+@profile
 def compute_statistics(src_cfg, **kwargs):
     """ Computes sufficient statistics needed for the bag-of-words or
     Fisher vector model.
@@ -172,7 +176,6 @@ def compute_statistics(src_cfg, **kwargs):
     dataset.VOC_SIZE = nr_clusters
 
     model_type = kwargs.get('model_type', 'fv')
-    descs_to_sstats = Model(model_type, nr_clusters)._compute_statistics
 
     worker = kwargs.get('worker', compute_statistics_from_video_worker)
 
@@ -181,8 +184,8 @@ def compute_statistics(src_cfg, **kwargs):
 
     fn_gmm = os.path.join(dataset.FEAT_DIR, 'gmm', 'gmm_%d' % nr_clusters)
     gmm = kwargs.get('gmm', load_gmm(fn_gmm))
+    descs_to_sstats = Model(model_type, gmm).descs_to_sstats
 
-    grids = kwargs.get('grids', [(1, 1, 1)])
     nr_processes = kwargs.get('nr_processes', multiprocessing.cpu_count())
 
     outfilename = kwargs.get('outfilename', 'stats.tmp')
@@ -190,12 +193,11 @@ def compute_statistics(src_cfg, **kwargs):
     train_samples = dataset.get_data('train')[0]
     test_samples = dataset.get_data('test')[0]
     samples = list(set(train_samples + test_samples))
-    
+
     sstats_out = SstatsMap(
         os.path.join(
             dataset.FEAT_DIR, 'statistics_k_%d' % nr_clusters, outfilename))
 
-    # Insert here a for grid in model.grids: 
     if nr_processes > 1:
         import multiprocessing as mp
         processes = []
@@ -226,7 +228,7 @@ def compute_statistics_from_video_worker(dataset, samples, sstats_out,
     """ Computes the Fisher vector directly from the video in an online
     fashion. The chain of actions is the following: compute descriptors one
     by one, get a descriptor and apply PCA to it, then compute the
-    posterior probabilities and update the Fisher vector.  
+    posterior probabilities and update the Fisher vector.
 
     Inputs
     ------
@@ -248,7 +250,7 @@ def compute_statistics_from_video_worker(dataset, samples, sstats_out,
     gmm: GMM instance
 
     Note: it doesn't have implemented multiple grids (spatial pyramids)
-        
+
     """
     nr_frames_to_skip = kwargs.get('nr_frames_to_skip', 0)
     delta = kwargs.get('delta', 0)
@@ -267,7 +269,7 @@ def compute_statistics_from_video_worker(dataset, samples, sstats_out,
         if sstats_out.exists(str(sample)):
             continue
         sstats_out.touch(str(sample))
-        
+
         begin_frames, end_frames = get_time_intervals(
             sample.bf, sample.ef, delta, spacing)
 
@@ -290,17 +292,9 @@ def compute_statistics_from_video_worker(dataset, samples, sstats_out,
         sstats_out.write(str(sample), sstats,
                          info={'label': label, 'nr_descs': N})
 
-        # TODO Remove this.
-        if np.isnan(np.max(sstats)):
-            continue
-        ff = os.path.join(
-            dataset.FEAT_DIR, 'statistics_k_%d' % dataset.VOC_SIZE,
-            'stats.tmp', '%s_1_1_1_0.dat' % str(sample))
-        assert_allclose(sstats, np.fromfile(ff, dtype=np.float32))
-        
 
 def usage():
-prog_name = os.path.basename(sys.argv[0])
+    prog_name = os.path.basename(sys.argv[0])
     print 'Usage: %s -d dataset -m model -k nr_clusters' % prog_name
     print
     print 'Computes and save sufficient statistics for a specified dataset.'
@@ -364,6 +358,7 @@ prog_name = os.path.basename(sys.argv[0])
     print '     ---------'
     # TODO
     print '         ./compute_sstats.py -d hollywood2_clean'
+
 
 def main():
     try:
