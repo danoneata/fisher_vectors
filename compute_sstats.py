@@ -72,7 +72,7 @@ def read_descriptors_from_video(infile, **kwargs):
     ip_type: string, optional, default 'dense5.track15mbh'
         The type of descriptors to be returned.
 
-    begin_frames: list, optional, default [0]
+    begin_frames: list, optional, default [1]
         The indices of the beginning frames.
 
     end_frames: list, optional, default [1e6]
@@ -88,7 +88,7 @@ def read_descriptors_from_video(infile, **kwargs):
     # Get keyword arguments or set default values.
     nr_descriptors = kwargs.get('nr_descriptors', 1000)
     ip_type = kwargs.get('ip_type', 'dense5.track15mbh')
-    begin_frames = kwargs.get('begin_frames', [0])
+    begin_frames = kwargs.get('begin_frames', [1])
     end_frames = kwargs.get('end_frames', [1e6])
     nr_skip_frames = kwargs.get('nr_skip_frames', 0)
 
