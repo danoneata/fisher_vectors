@@ -171,9 +171,10 @@ def compute_statistics(src_cfg, **kwargs):
     """
     # Default parameters.
     ip_type = kwargs.get('ip_type', 'dense5.track15mbh')
-    nr_clusters = kwargs.get('nr_clusters', 128)
+    suffix = kwargs.get('suffix', '')
+    dataset = Dataset(src_cfg, ip_type=ip_type, suffix=suffix)
 
-    dataset = Dataset(src_cfg, ip_type=ip_type)
+    nr_clusters = kwargs.get('nr_clusters', 128)
     dataset.VOC_SIZE = nr_clusters
 
     model_type = kwargs.get('model_type', 'fv')
@@ -347,6 +348,9 @@ def usage():
     print '         statistics computation. The "per slice" worker compute'
     print '         multiple sufficient statistics per video.'
     print
+    print '     --suffix=SUFFIX'
+    print '         Appends a suffix to the feature directory.' 
+    print
     # TODO
     print '     -g --grids=GRID'
     print '         Specify the type of spatial pyramids used. The argument'
@@ -376,9 +380,9 @@ def main():
     try:
         opt_pairs, args = getopt.getopt(
             sys.argv[1:], "hd:i:m:k:o:w:",
-            ["help", "dataset=", "ip_type=", "model=",
-             "nr_clusters=", "nr_processes=", "delta=",
-             "spacing=", "nr_frames_to_skip=", "out_filename=", "worker="])
+            ["help", "dataset=", "ip_type=", "model=", "nr_clusters=",
+             "nr_processes=", "delta=", "spacing=", "nr_frames_to_skip=",
+             "out_filename=", "worker=", "suffix="])
     except getopt.GetoptError, err:
         print str(err)
         usage()
@@ -409,6 +413,8 @@ def main():
             kwargs['outfilename'] = arg
         elif opt in ("w", "--worker"):
             kwargs['worker_type'] = arg
+        elif opt in ("--suffix"):
+            kwargs['suffix'] = arg
 
     compute_statistics(src_cfg, **kwargs)
 
