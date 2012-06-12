@@ -138,7 +138,7 @@ def get_slice_number(current_frame, begin_frames, end_frames):
     """
     for ii, (begin_frame, end_frame) in enumerate(zip(begin_frames,
                                                       end_frames)):
-        if begin_frame <= current_frame < end_frame:
+        if begin_frame <= current_frame <= end_frame:
             return ii
     # return -1
     # Why did you do this, past Dan? Maybe future Dan will explain.
