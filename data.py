@@ -136,10 +136,10 @@ class SstatsMap(object):
                     nr_elems % len_sstats != 0 or
                     np.isnan(np.max(data))):
                     status = False
-                    incorrect_files.append(filename)
+                    incorrect_files.append(filename + self.data_ext)
             except IOError:
                 status = False
-                missing_files.append(filename)
+                missing_files.append(filename + self.data_ext)
 
         if print_incorrect:
             print 'Incorrect values in the following files:'
