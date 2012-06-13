@@ -108,21 +108,47 @@ class SstatsMap(object):
         len_sstats: int
             Length of sufficient statistics.
 
-        verbose: boolean, optional
-            Print output. Default, True.
+        print_incorrect: boolean, optional
+            Prints incorrectly computed sufficient statistics.
+
+        print_missing: boolean, optional
+            Prints missing sufficient statistics.
+
+        Output
+        ------
+        status: boolean
+            Returns True if all the files pass the verification and False
+            otherwise.
 
         """
-        verbose = kwargs.get('verbose', True)
+        print_missing = kwargs.get('print_missing', True)
+        print_incorrect = kwargs.get('print_incorrect', True)
+
         status = True
+        missing_files = []
+        incorrect_files = []
+
         for filename in filenames:
-            data = self.read(filename)
-            nr_elems = len(data)
-            if (nr_elems == 0 or
-                nr_elems % len_sstats != 0 or
-                np.isnan(np.max(data))):
+            try:
+                data = self.read(filename)
+                nr_elems = len(data)
+                if (nr_elems == 0 or
+                    nr_elems % len_sstats != 0 or
+                    np.isnan(np.max(data))):
+                    status = False
+                    incorrect_files.append(filename)
+            except IOError:
                 status = False
-                if verbose:
-                    print filename
+                missing_files.append(filename)
+
+        if print_incorrect:
+            print 'Incorrect values in the following files:'
+            print ' '.join(incorrect_files)
+
+        if print_missing:
+            print 'Missing files:'
+            print ' '.join(missing_files)
+
         return status
 
     def merge(self, filenames, outfilename, len_sstats, **kwargs):
@@ -284,7 +310,7 @@ def main():
         sys.exit(1)
 
     if task == "check":
-        check_given_dataset(src_cfg, nr_clusters)
+        check_given_dataset(src_cfg, nr_clusters, **kwargs)
     elif task == "merge":
         merge_given_dataset(src_cfg, nr_clusters, **kwargs)
 
