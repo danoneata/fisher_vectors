@@ -97,7 +97,7 @@ class SstatsMap(object):
         info_file.close()
         return info
 
-    def check(self, filenames, len_sstats):
+    def check(self, filenames, len_sstats, **kwargs):
         """ Performs simple checks of the data for the given filenames.
 
         Inputs
@@ -180,7 +180,8 @@ def merge_given_dataset(src_cfg, nr_clusters, **kwargs):
     """ Merges the statistics and the labels for the train and the test set.
 
     """
-    dataset = Dataset(src_cfg, ip_type=IP_TYPE)
+    suffix = kwargs.get('suffix', '')
+    dataset = Dataset(src_cfg, ip_type=IP_TYPE, suffix=suffix)
 
     basepath = os.path.join(dataset.FEAT_DIR,
                             'statistics_k_%d' % nr_clusters, 'stats.tmp')
@@ -202,7 +203,8 @@ def merge_given_dataset(src_cfg, nr_clusters, **kwargs):
 
 def check_given_dataset(src_cfg, nr_clusters, **kwargs):
     """ Checks the train and the test samples. """
-    dataset = Dataset(src_cfg, ip_type=IP_TYPE)
+    suffix = kwargs.get('suffix', '')
+    dataset = Dataset(src_cfg, ip_type=IP_TYPE, suffix=suffix)
 
     basepath = os.path.join(dataset.FEAT_DIR,
                             'statistics_k_%d' % nr_clusters,
@@ -244,13 +246,17 @@ def usage():
     print '     -o, --out_folder=PATH'
     print '         Option only for "merge" task. Location where the merged'
     print '         files will be stored. Optional parameter.'
+    print
+    print '     --suffix=SUFFIX'
+    print '         Appends a suffix to the standard feature path name.'
 
 
 def main():
     try:
         opt_pairs, args = getopt.getopt(
             sys.argv[1:], "hd:k:t:o:",
-            ["help", "dataset=", "nr_clusters=", "task=", "out_folder="])
+            ["help", "dataset=", "nr_clusters=", "task=", "out_folder=",
+             "suffix="])
     except getopt.GetoptError, err:
         print str(err)
         usage()
@@ -269,6 +275,8 @@ def main():
             task = arg
         elif opt in ("-o", "--out_folder"):
             kwargs["outfolder"] = arg
+        elif opt in ("--suffix"):
+            kwargs["suffix"] = arg
 
     if task not in ("check", "merge"):
         print "Unknown task."
