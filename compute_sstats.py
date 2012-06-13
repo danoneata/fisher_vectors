@@ -140,9 +140,11 @@ def get_slice_number(current_frame, begin_frames, end_frames):
                                                       end_frames)):
         if begin_frame <= current_frame <= end_frame:
             return ii
-    # return -1
-    # Why did you do this, past Dan? Maybe future Dan will explain.
-    # I still have no clue today, on the 6th of June.
+    # Some videos have different number of frames after resizing.
+    # Return the last slice number if the current frame is larger than the end
+    # frame.
+    if current_frame > end_frame:
+        return ii
     raise Exception('Frame number not in the specified intervals.')
 
 
