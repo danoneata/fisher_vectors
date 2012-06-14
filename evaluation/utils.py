@@ -5,3 +5,11 @@ def tuple_labels_to_list_labels(tuple_labels):
         assert len(label) == 1, "The dataset should not be multilabel."
         list_labels.append(label[0])
     return list_labels
+
+
+def average_precision(y_true, y_pred):
+    """ Swaps arguments for Adrien's function, so it is compatible with
+    sklearn.
+
+    """
+    return result_file_functions.get_ap(y_pred, y_true)

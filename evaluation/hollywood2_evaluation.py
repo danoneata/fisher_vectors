@@ -10,14 +10,6 @@ from .base_evaluation import BaseEvaluation
 import result_file_functions
 
 
-def average_precision(y_true, y_pred):
-    """ Swaps arguments for Adrien's function, so it is compatible with
-    sklearn.
-
-    """
-    return result_file_functions.get_ap(y_pred, y_true)
-
-
 class Hollywood2Evaluation(BaseEvaluation):
     """ Evaluation procedure for the Hollywood2 dataset. Fits a one-vs-rest
     classifier for each class.
