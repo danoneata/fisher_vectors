@@ -185,7 +185,7 @@ def compute_statistics(src_cfg, **kwargs):
     if worker_type == 'normal':
         worker = compute_statistics_from_video_worker
     elif worker_type == 'per_slice':
-        from per_slice.compute_sstats_per_slice import compute_statistics_worker
+        from per_slice.compute_sstats_worker import compute_statistics_worker
         worker = compute_statistics_worker
 
     fn_pca = os.path.join(dataset.FEAT_DIR, 'pca', 'pca_64.pkl')

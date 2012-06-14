@@ -1,10 +1,10 @@
 import numpy as np
 import os
 
-from compute_sstats import get_sample_label
-from compute_sstats import get_time_intervals
-from compute_sstats import get_slice_number
-from compute_sstats import read_descriptors_from_video
+from fisher_vectors.compute_sstats import get_sample_label
+from fisher_vectors.compute_sstats import get_time_intervals
+from fisher_vectors.compute_sstats import get_slice_number
+from fisher_vectors.compute_sstats import read_descriptors_from_video
 
 
 def compute_statistics_worker(dataset, samples, sstats_out, descs_to_sstats,
@@ -32,7 +32,7 @@ def compute_statistics_worker(dataset, samples, sstats_out, descs_to_sstats,
             if sstats_out.exists(str(sample)):
                 continue
             sstats_out.touch(str(sample))
-            
+
             begin_frames, end_frames = get_time_intervals(
                 sample.bf, sample.ef, delta, spacing)
 
@@ -44,7 +44,7 @@ def compute_statistics_worker(dataset, samples, sstats_out, descs_to_sstats,
 
             for chunk in read_descriptors_from_video(infile, nr_descriptors=1):
                 xx = pca.transform(chunk[:, 3:])
-                
+
                 # Determine slice number based on time.
                 ii = get_slice_number(chunk[:, 2], begin_frames, end_frames)
                 N[ii] += 1
@@ -53,7 +53,9 @@ def compute_statistics_worker(dataset, samples, sstats_out, descs_to_sstats,
                 sstats[ii] += descs_to_sstats(xx, gmm)
 
             # Ignore chunks with 0 descriptors
-            sstats = sstats[N != 0, :] / N[N != 0, np.newaxis]
+            N_not_null = N[N != 0]
+            sstats = sstats[N != 0, :]
+            sstats /= N_not_null[:, np.newaxis]
             # Write also the label, the number of descriptors and begin and end
             # frames.
             sstats_out.write(str(sample), sstats, info={
