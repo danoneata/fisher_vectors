@@ -1,10 +1,13 @@
 import numpy as np
 from numpy import arange, array, ceil, Inf, mean
 from sklearn import svm
+from sklearn.grid_search import GridSearchCV
+from sklearn.cross_validation import StratifiedShuffleSplit
 from ipdb import set_trace
 
 from .base_evaluation import BaseEvaluation
 from utils import tuple_labels_to_list_labels
+from utils import average_precision
 import result_file_functions as rff
 
 
@@ -19,11 +22,14 @@ class TrecVid11Evaluation(BaseEvaluation):
         assert scenario in ('multiclass', 'versus_null')
 
     def fit(self, Kxx, cx):
-        cx = tuple_labels_to_list_labels(cy)
+        cx = tuple_labels_to_list_labels(cx)
         if self.scenario == 'multiclass':
             self._fit_one_vs_one(Kxx, cx)
         elif self.scenario == 'versus_null':
             self._fit_one_vs_rest(Kxx, cx)
+        elif self.scenario == 'per_slice':
+            self._fit_per_slice(Kxx, cx)
+            self.pp = 16  # Equivalent to the maximum.
         return self
 
     def score(self, Kyx, cy):
@@ -32,12 +38,44 @@ class TrecVid11Evaluation(BaseEvaluation):
             return self._score_one_vs_one(Kyx, cy)
         elif self.scenario == 'versus_null':
             return self._score_one_vs_rest(Kyx, cy)
+        elif self.scenario == 'per_slice':
+            return self._score_per_slice(Kyx, cy)
 
     def predict(self, Kyx, cy):
         cy = tuple_labels_to_list_labels(cy)
         if self.scenario == 'multiclass':
             return self._predict_one_vs_one(Kyx, cy)
         return None
+
+    def _fit_per_slice(self, tr_kernel, tr_labels):
+        """ Fits a SVM classifier for one kernel. """
+        self.clf = []
+        c_values = np.power(3.0, np.arrange(-2, 8))
+        # Using sklearn crossvalidation at the moment. Cleaner.
+        my_svm = svm.SVC(
+            kernel='precomputed', probability=True, class_weight='auto')
+
+        tuned_parameters = [{'C': c_values}] 
+        splits = StratifiedShuffleSplit(tr_labels, 3, test_size=0.25)
+
+        self.clf.append(
+            GridSearchCV(my_svm, tuned_parameters,
+                         score_func=average_precision, cv=splits,
+                         n_jobs=4))
+        self.clf[0].fit(tr_kernel, tr_labels)
+
+    def _predict_per_slice(self, te_kernel_iter):
+        predicted_values = []
+        for te_kernel in te_kernel_iter:
+            predicted_values_slice = self.clf[0].predict_proba(
+                te_kernel_iter)[:, 1]
+            predicted_values.append(
+                np.linalg.norm(predicted_values_slice, self.pp))
+        return predicted_values
+            
+    def _score_per_slice(self, te_kernel_iter, te_labels):
+        predicted_values = te_labels
+        return average_precision(te_labels, predicted_values)
 
     def _fit_one_vs_rest(self, Kxx, cx):
         """ Fits a one-vs-null SVM classifier. """
