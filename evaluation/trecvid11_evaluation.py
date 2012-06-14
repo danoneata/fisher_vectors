@@ -16,10 +16,10 @@ class TrecVid11Evaluation(BaseEvaluation):
     average precision of each class against the background class NULL.
 
     """
-    def __init__(self, scenario='multiclass'):
+    def __init__(self, **kwargs):
         self.null_class_idx = 15
-        self.scenario = scenario
-        assert scenario in ('multiclass', 'versus_null')
+        self.scenario = kwargs.get('eval_type', 'multiclass')
+        assert self.scenario in ('multiclass', 'versus_null')
 
     def fit(self, Kxx, cx):
         cx = tuple_labels_to_list_labels(cx)
