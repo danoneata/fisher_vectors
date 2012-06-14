@@ -202,17 +202,14 @@ class SstatsMap(object):
         labels_file.close()
 
 
-def merge_given_dataset(src_cfg, nr_clusters, **kwargs):
+def merge_given_dataset(dataset, **kwargs):
     """ Merges the statistics and the labels for the train and the test set.
 
     """
-    suffix = kwargs.get('suffix', '')
-    dataset = Dataset(src_cfg, ip_type=IP_TYPE, suffix=suffix)
-
-    basepath = os.path.join(dataset.FEAT_DIR,
-                            'statistics_k_%d' % nr_clusters, 'stats.tmp')
-    outfolder = os.path.join(dataset.FEAT_DIR, 'statistics_k_%d' % nr_clusters) 
+    basepath = os.path.join(dataset.SSTATS_DIR, 'stats.tmp')
+    outfolder = dataset.SSTATS_DIR
     data = SstatsMap(basepath)
+    nr_clusters = dataset.VOC_SIZE
 
     tr_samples = dataset.get_data('train')[0]
     str_tr_samples = list(set([str(sample) for sample in tr_samples]))
@@ -227,15 +224,11 @@ def merge_given_dataset(src_cfg, nr_clusters, **kwargs):
     print "Merged test data."
 
 
-def check_given_dataset(src_cfg, nr_clusters, **kwargs):
+def check_given_dataset(dataset, **kwargs):
     """ Checks the train and the test samples. """
-    suffix = kwargs.get('suffix', '')
-    dataset = Dataset(src_cfg, ip_type=IP_TYPE, suffix=suffix)
-
-    basepath = os.path.join(dataset.FEAT_DIR,
-                            'statistics_k_%d' % nr_clusters,
-                            'stats.tmp')
+    basepath = os.path.join(dataset.SSTATS_DIR, 'stats.tmp')
     data = SstatsMap(basepath)
+    nr_clusters = dataset.VOC_SIZE
 
     tr_samples = dataset.get_data('train')[0]
     str_tr_samples = list(set([str(sample) for sample in tr_samples]))
@@ -289,6 +282,7 @@ def main():
         sys.exit(1)
 
     kwargs = {}
+    suffix = ''
     for opt, arg in opt_pairs:
         if opt in ("-h", "--help"):
             usage()
@@ -302,17 +296,19 @@ def main():
         elif opt in ("-o", "--out_folder"):
             kwargs["outfolder"] = arg
         elif opt in ("--suffix"):
-            kwargs["suffix"] = arg
+            suffix = arg
 
     if task not in ("check", "merge"):
         print "Unknown task."
         usage()
         sys.exit(1)
 
+    dataset = Dataset(
+        src_cfg, ip_type=IP_TYPE, suffix=suffix, nr_clusters=nr_clusters)
     if task == "check":
-        check_given_dataset(src_cfg, nr_clusters, **kwargs)
+        check_given_dataset(dataset, **kwargs)
     elif task == "merge":
-        merge_given_dataset(src_cfg, nr_clusters, **kwargs)
+        merge_given_dataset(dataset, **kwargs)
 
 
 if __name__ == '__main__':
