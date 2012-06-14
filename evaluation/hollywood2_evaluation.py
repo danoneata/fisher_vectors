@@ -7,7 +7,6 @@ from sklearn.cross_validation import StratifiedShuffleSplit
 from sklearn.preprocessing import LabelBinarizer
 
 from .base_evaluation import BaseEvaluation
-import result_file_functions
 
 
 class Hollywood2Evaluation(BaseEvaluation):

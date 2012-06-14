@@ -1,3 +1,6 @@
+import result_file_functions
+
+
 def tuple_labels_to_list_labels(tuple_labels):
     """ Converts labels such as [(1, ), (3, )] to [1, 3]. """
     list_labels = []
