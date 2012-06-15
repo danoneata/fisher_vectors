@@ -166,11 +166,15 @@ class SstatsMap(object):
             Name of the output folder. By default, the output folder is the
             same as the folder where the statistics are saved.
 
+        aggregate: boolean, optional
+            Specifies if it should aggregate per slices statistics together.
+
         Note: The function also computes the associated file with labels. This
         file will be named as 'labels_' + `outfilename`.
 
         """
         outfolder = kwargs.get('outfolder', self.basepath)
+        aggregate = kwargs.get('aggregate', False)
 
         sstats_filename = os.path.join(outfolder, outfilename + self.data_ext)
         labels_filename = os.path.join(outfolder, 'labels_'
@@ -186,7 +190,12 @@ class SstatsMap(object):
         all_labels = []
         for filename in filenames:
             sstats = self.read(filename)
-            label = self.read_info(filename)['label']
+            info = self.read_info(filename)
+            label = info['label']
+            nr_descs = info['nr_descs']
+
+            if aggregate:
+                sstats = self._aggregate_sstats(sstats, nr_descs, len_sstats)
 
             nr_elems = len(sstats)
             nr_of_slices = nr_elems / len_sstats
@@ -200,6 +209,12 @@ class SstatsMap(object):
         cPickle.dump(all_labels, labels_file)
         sstats_file.close()
         labels_file.close()
+
+    def _aggregate_sstats(self, sstats, nr_descs, len_sstats):
+        sstats = sstats.reshape((-1, len_sstats))
+        nn = nr_descs[nr_descs != 0]
+        sstats = np.sum(sstats * nn[:, np.newaxis], 0) / np.sum(nn)
+        return sstats
 
 
 def merge_given_dataset(dataset, **kwargs):
