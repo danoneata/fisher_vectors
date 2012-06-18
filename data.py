@@ -213,7 +213,8 @@ class SstatsMap(object):
     def _aggregate_sstats(self, sstats, nr_descs, len_sstats):
         sstats = sstats.reshape((-1, len_sstats))
         nn = nr_descs[nr_descs != 0]
-        sstats = np.sum(sstats * nn[:, np.newaxis], 0) / np.sum(nn)
+        sstats = np.array(np.sum(sstats * nn[:, np.newaxis], 0) / np.sum(nn),
+                          dtype=np.float32)
         return sstats
 
 
