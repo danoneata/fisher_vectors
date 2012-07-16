@@ -69,16 +69,19 @@ class FVModel(BaseModel):
         xx = np.atleast_2d(xx)
         N = xx.shape[0]
         K = gmm.k
+        D = gmm.d
         # Compute posterior probabilities using yael.
         Q_yael = fvec_new(N * K)
         gmm_compute_p(N, numpy_to_fvec_ref(xx), gmm, Q_yael, GMM_FLAGS_W)
         Q = fvec_to_numpy(Q_yael, N * K).reshape(N, K)
         yael.free(Q_yael)
         # Compute statistics.
-        Q_sum = sum(Q, 0) / N                     # 1xK
-        Q_xx = dot(Q.T, xx).flatten() / N         # 1xKD
-        Q_xx_2 = dot(Q.T, xx ** 2).flatten() / N  # 1xKD
-        return np.array(hstack((Q_sum, Q_xx, Q_xx_2)), dtype=np.float32)
+        sstats = np.zeros(K + 2 * K * D, dtype=np.float32)
+        sstats[: K] = np.sum(Q, 0) / N                            # 1xK
+        sstats[K: K + K * D] = dot(Q.T, xx).flatten() / N         # 1xKD
+        sstats[K + K * D: K + 2 * K * D] = dot(
+            Q.T, xx ** 2).flatten() / N                           # 1xKD
+        return sstats
 
     @staticmethod
     def sstats_to_features(ss, gmm):
