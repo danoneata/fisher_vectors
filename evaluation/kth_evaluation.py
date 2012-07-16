@@ -16,7 +16,7 @@ class KTHEvaluation(BaseEvaluation):
     one-vs-one style to the kernel matrix.
     
     """
-    def __init__(self):
+    def __init__(self, **kwargs):
         pass
 
     def fit(self, Kxx, cx):

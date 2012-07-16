@@ -7,6 +7,7 @@ from sklearn.cross_validation import StratifiedShuffleSplit
 from sklearn.preprocessing import LabelBinarizer
 
 from .base_evaluation import BaseEvaluation
+from utils import average_precision
 
 
 class Hollywood2Evaluation(BaseEvaluation):
@@ -14,7 +15,7 @@ class Hollywood2Evaluation(BaseEvaluation):
     classifier for each class.
 
     """
-    def __init__(self):
+    def __init__(self, **kwargs):
         pass
 
     def fit(self, Kxx, cx):
