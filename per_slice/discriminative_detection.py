@@ -25,9 +25,10 @@ from fisher_vectors.model.fv_model import FVModel
 from fisher_vectors.preprocess.gmm import load_gmm
 
 
-NR_POS = 10000
-NR_NEG = 10000
+NR_POS = 10#000
+NR_NEG = 10#000
 CHUNK_SIZE = 300
+FILE = '/home/lear/oneata/tmp/train_per_video_class_%d_iteration_0.dat'
 RESULT_FILE = ('/home/lear/oneata/data/trecvid11/results/'
                'retrain_feature_pooling_with_background_info.txt')
 
@@ -106,8 +107,9 @@ class SliceData(object):
         #_nr_descs = _normalize(self.nr_descs, self.video_limits)
         #return [aggregate(self.sstats, _nr_descs, self.video_limits),
         #        aggregate(self.sstats, _nr_descs, self.video_limits)]
-        return [aggregate(self.sstats, self.nr_descs, self.video_limits),
-                aggregate(self.sstats, self.nr_descs, self.video_limits)]
+        #return [aggregate(self.sstats, self.nr_descs, self.video_limits),
+        #        aggregate(self.sstats, self.nr_descs, self.video_limits)]
+        return aggregate(self.sstats, self.nr_descs, self.video_limits)
 
     def get_sample_labels(self):
         sample_labels = []
@@ -228,6 +230,7 @@ def discriminative_detection_worker(class_idx, **kwargs):
     max_nr_iter = kwargs.get('max_nr_iter', 1)
     dataset = kwargs.get('dataset', Dataset(
         'trecvid11_small', nr_clusters=128, suffix='.small.per_slice'))
+    outfile = kwargs.get('outfile', FILE % class_idx)
     gmm = load_gmm(dataset.GMM)
     tr_slice_data = get_slice_data_from_file(dataset, 'train', class_idx, gmm)
     te_slice_data = get_slice_data_from_file(dataset, 'test', class_idx, gmm)
@@ -236,12 +239,20 @@ def discriminative_detection_worker(class_idx, **kwargs):
     for ii in xrange(max_nr_iter):
         print 'Iteration %d' % ii
         # Feature pooling.
+        model = Model(gmm)
         if ii == 0:
-            tr_sample_sstats = tr_slice_data.get_aggregated_by_nr_descs()
+            if not os.path.exists(outfile):
+                ss = tr_slice_data.get_aggregated_by_nr_descs()
+                np.array(ss, dtype=np.float32).tofile(outfile)
+                tr_sample_sstats = [ss, ss]
+            else:
+                # Cache results.
+                xx = np.fromfile(
+                    outfile, dtype=np.float32).reshape((-1, model.D))
+                tr_sample_sstats = [ss, ss]
         else:
             tr_sample_sstats = tr_slice_data.get_aggregated()
         # Fisher vectors on pooled features.
-        model = Model(gmm)
         tr_kernel = model.get_tr_kernel(tr_sample_sstats)
         # Train classifier on pooled features.
         eval = Evaluation()
@@ -270,9 +281,9 @@ def discriminative_detection_worker(class_idx, **kwargs):
 def discriminative_detection(start_idx=0, end_idx=15):
     for ii in xrange(start_idx, end_idx):
         score = discriminative_detection_worker(ii)
-        ff = open(RESULT_FILE, 'a')
-        ff.write('Class %d score %2.3f\n' % (ii, score))
-        ff.close()
+        #ff = open(RESULT_FILE, 'a')
+        #ff.write('Class %d score %2.3f\n' % (ii, score))
+        #ff.close()
 
 
 def main():
