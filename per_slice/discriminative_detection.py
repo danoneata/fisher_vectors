@@ -25,9 +25,9 @@ from fisher_vectors.model.fv_model import FVModel
 from fisher_vectors.preprocess.gmm import load_gmm
 
 
-NR_POS = 10000
-NR_NEG = 10000
-CHUNK_SIZE = 5000
+NR_POS = 10
+NR_NEG = 10
+CHUNK_SIZE = 4
 RESULT_FILE = ('/home/lear/oneata/data/trecvid11/results/'
                'retrain_feature_pooling_with_background_info.txt')
 
@@ -46,7 +46,7 @@ def aggregate(sstats, weights, limits):
 
 
 def chunker(seq, size):
-    return (seq[pos:pos + size] for pos in xrange(0, len(seq), size))
+    return (seq[pos:pos + size] for pos in xrange(0, len(seq), size - 1))
 
 
 def _weighted_sum(sstats, weights):
@@ -115,15 +115,19 @@ class SliceData(object):
 
     def update_scores(self, clf, model):
         predictions = []
-        for chunk, chunk_scores in izip(
-            chunker(self.sstats, CHUNK_SIZE),
-            chunker(self.scores, CHUNK_SIZE)):
+        #for chunk, chunk_scores in izip(
+        #    chunker(self.sstats, CHUNK_SIZE),
+        #    chunker(self.scores, CHUNK_SIZE)):
+        for limits in chunker(self.video_limits, CHUNK_SIZE):
             # Augment sufficient statistics with background information.
+            low = limits[0]
+            high = limits[-1]
             sstats_list = [
-                chunk * _normalize(chunk_scores[:, np.newaxis],
-                                   self.video_limits),
-                chunk * _normalize(1. - chunk_scores[:, np.newaxis],
-                                   self.video_limits)]
+                self.sstats[low: high] * _normalize(
+                    self.scores[low: high, np.newaxis], limits - low),
+                self.sstats[low: high] * _normalize(
+                    1. - self.scores[low: high, np.newaxis], limits - low)
+            ]
             #sstats_list = [
             #    chunk * chunk_scores[:, np.newaxis],
             #    chunk * (1. - chunk_scores[:, np.newaxis])]
