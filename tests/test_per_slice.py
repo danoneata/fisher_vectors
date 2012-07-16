@@ -9,7 +9,9 @@ import cPickle as pickle
 
 from dataset import Dataset
 from fisher_vectors.per_slice.features import merge_class_given_dataset
-from fisher_vectors.per_slice.discriminative_detection import aggregate, _normalize
+from fisher_vectors.per_slice.discriminative_detection import aggregate
+from fisher_vectors.per_slice.discriminative_detection import _normalize
+from fisher_vectors.per_slice.discriminative_detection import chunker
 
 
 class TestPerSliceFeatures():
@@ -55,6 +57,8 @@ class TestPerSliceData():
         self.aggregated_sstats = np.array([
             [ 0.76420253,  0.25447365,  0.53441721],
             [ 0.49455268,  0.41695988,  0.53098158]])
+        self.limits_long = np.array([0, 6, 10, 12, 15])
+        self.split_limits_ling = [np.array([0, 6, 10]), np.array([12, 15])]
 
     def test_normalize_scores(self):
         results = _normalize(self.scores, self.limits)
@@ -64,3 +68,12 @@ class TestPerSliceData():
         results = aggregate(self.sstats, self.norm_scores,
                                        self.limits)
         assert_allclose(results, self.aggregated_sstats)
+
+    def test_chunk_normalization(self):
+        result = np.zeros_like(self.scores)
+        for limits in chunker(self.limits, 2):
+            low = limits[0]
+            high = limits[-1]
+            result[low: high] = _normalize(
+                self.scores[low: high], limits - low)
+        assert_allclose(result, self.norm_scores)
