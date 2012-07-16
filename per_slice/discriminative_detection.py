@@ -87,7 +87,7 @@ class SliceData(object):
     def __init__(self, sstats, labels, info):
         self.sstats = sstats
         self.labels = labels
-        self.video_limits = info['limits']
+        self.video_limits = np.array(info['limits'])
         self.video_names = _extend_per_slice(
             info['video_names'], self.video_limits)
         self.nr_descs = info['nr_descs']
