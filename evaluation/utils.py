@@ -2,12 +2,18 @@ import result_file_functions
 import numpy as np
 
 
-def tuple_labels_to_list_labels(tuple_labels):
-    """ Converts labels such as [(1, ), (3, )] to [1, 3]. """
+def tuple_labels_to_list_labels(tuple_labels, positive_class=None):
+    """ Converts labels such as [(1, ), (3, )] to [1, 3]. If positive class
+    is given, the labels are also binarized.
+    
+    """
     list_labels = []
     for label in tuple_labels:
         assert len(label) == 1, "The dataset should not be multilabel."
-        list_labels.append(label[0])
+        _label = label[0]
+        if positive_class is not None:
+            _label = 1 if _label == positive_class else -1
+        list_labels.append(_label)
     return np.array(list_labels)
 
 
