@@ -57,10 +57,9 @@ def _weighted_sum(sstats, weights):
 
 
 def _normalize(values, limits):
+    assert values.ndim == 1, "The values vector should be one-dimensional."
     new_values = np.zeros_like(values)
     for low, high in izip(limits[: -1], limits[1:]):
-        if low > len(new_values):
-            break
         new_values[low: high] = values[low: high] / np.sum(
             values[low: high])
     return new_values
@@ -129,9 +128,9 @@ class SliceData(object):
             sstats_list = [self.sstats[low: high], self.sstats[low: high]]
             #sstats_list = [
             #    self.sstats[low: high] * _normalize(
-            #        self.scores[low: high, np.newaxis], limits - low),
+            #        self.scores[low: high], limits - low)[:, np.newaxis],
             #    self.sstats[low: high] * _normalize(
-            #        1. - self.scores[low: high, np.newaxis], limits - low)
+            #        1. - self.scores[low: high], limits - low)[:, np.newaxis]
             #]
             #sstats_list = [
             #    chunk * chunk_scores[:, np.newaxis],
