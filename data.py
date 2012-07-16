@@ -1,5 +1,6 @@
 #!/usr/bin/python
 import cPickle
+from collections import defaultdict
 import getopt
 import os
 import sys
@@ -44,8 +45,7 @@ class SstatsMap(object):
 
         info: dict, optional
             Additional information that is stored for each sample: label,
-            nr_slices, begin_frames, end_frames, nr_descs_per_slice. Default,
-            None.
+            nr_slices, begin_frames, end_frames, nr_descs. Default, None.
 
         Note
         ----
@@ -151,6 +151,63 @@ class SstatsMap(object):
 
         return status
 
+    def get_merged(self, filenames, len_sstats, **kwargs):
+        """ Returns list for the merged sufficient statisitcs, labels, video
+        limits, video names, number of descriptors, begin frames and end
+        frames. 
+
+        Note 1: Slices that have no descriptors are ignored.
+
+        Note 2: Returned labels are not tuples.
+        
+        """
+        aggregate = kwargs.get('aggregate', False)
+        # TODO Mantain consistency with merge function.
+        all_sstats = []
+        all_labels = []
+        outinfo = defaultdict(list)
+        outinfo['limits'] = [0]
+        sstats = []
+        for filename in filenames:
+            sstats = self.read(filename)
+            info = self.read_info(filename)
+
+            nr_descs = info['nr_descs']
+            label = info['label']
+            outinfo['video_names'].append(filename.split('-')[0])
+
+            if aggregate:
+                sstats = self._aggregate_sstats(sstats, nr_descs, len_sstats)
+                outinfo['nr_descs'].append(np.sum(nr_descs))
+                outinfo['begin_frames'].append(info['begin_frames'][0])
+                outinfo['end_frames'].append(info['end_frames'][-1])
+            else:
+                outinfo['nr_descs'].append(nr_descs[nr_descs != 0])
+                outinfo['begin_frames'].append(
+                    np.array(info['begin_frames'])[nr_descs != 0])
+                outinfo['end_frames'].append(
+                    np.array(info['end_frames'])[nr_descs != 0])
+
+            nr_elems = len(sstats)
+            nr_of_slices = nr_elems / len_sstats
+            assert nr_elems % len_sstats == 0, ("The length of the sufficient"
+                                              "statistics is not a multiple of"
+                                              "the length of the descriptor.")
+            if not aggregate:
+                assert nr_of_slices == len(nr_descs[nr_descs != 0]), (
+                    "Incorrect number of descriptors.")
+
+            all_labels += [label for ii in xrange(nr_of_slices)]
+            outinfo['limits'].append(outinfo['limits'][-1] + nr_of_slices)
+            all_sstats.append(sstats.reshape(-1, len_sstats))
+
+        if not aggregate:
+            outinfo['nr_descs'] = np.hstack(outinfo['nr_descs'])
+            outinfo['begin_frames'] = np.hstack(outinfo['begin_frames'])
+            outinfo['end_frames'] = np.hstack(outinfo['end_frames'])
+
+        return np.vstack(all_sstats), all_labels, outinfo
+
     def merge(self, filenames, outfilename, len_sstats, **kwargs):
         """ Merges a specified set of filenames.
 
@@ -169,8 +226,13 @@ class SstatsMap(object):
         aggregate: boolean, optional
             Specifies if it should aggregate per slices statistics together.
 
-        Note: The function also computes the associated file with labels. This
+        Note:
+        1. The function also computes the associated file with labels. This
         file will be named as 'labels_' + `outfilename`.
+        
+        2. The output are the merged sufficient statistics, labels and other
+        useful information: video name, begin frames, end frames, number of
+        descriptors, limits.
 
         """
         outfolder = kwargs.get('outfolder', self.basepath)
@@ -179,6 +241,8 @@ class SstatsMap(object):
         sstats_filename = os.path.join(outfolder, outfilename + self.data_ext)
         labels_filename = os.path.join(outfolder, 'labels_'
                                        + outfilename + self.info_ext)
+        others_filename = os.path.join(outfolder, 'info_'
+                                       + outfilename + self.info_ext)
 
         # If sstats_file exists delete it.
         if os.path.exists(sstats_filename):
@@ -186,29 +250,55 @@ class SstatsMap(object):
 
         sstats_file = open(sstats_filename, 'a')
         labels_file = open(labels_filename, 'w')
+        others_file = open(others_filename, 'w')
 
         all_labels = []
+        outinfo = defaultdict(list)
+        outinfo['limits'] = [0]
         for filename in filenames:
             sstats = self.read(filename)
             info = self.read_info(filename)
-            label = info['label']
+
             nr_descs = info['nr_descs']
+            label = info['label']
+            outinfo['video_names'].append(filename.split('-')[0])
 
             if aggregate:
                 sstats = self._aggregate_sstats(sstats, nr_descs, len_sstats)
+                outinfo['nr_descs'].append(np.sum(nr_descs))
+                outinfo['begin_frames'].append(info['begin_frames'][0])
+                outinfo['end_frames'].append(info['end_frames'][-1])
+            else:
+                outinfo['nr_descs'].append(nr_descs[nr_descs != 0])
+                from ipdb import set_trace
+                outinfo['begin_frames'].append(
+                    np.array(info['begin_frames'])[nr_descs != 0])
+                outinfo['end_frames'].append(
+                    np.array(info['end_frames'])[nr_descs != 0])
 
             nr_elems = len(sstats)
             nr_of_slices = nr_elems / len_sstats
             assert nr_elems % len_sstats == 0, ("The length of the sufficient"
                                               "statistics is not a multiple of"
                                               "the length of the descriptor.")
+            if not aggregate:
+                assert nr_of_slices == len(nr_descs[nr_descs != 0]), (
+                    "Incorrect number of descriptors.")
 
             all_labels += [label for ii in xrange(nr_of_slices)]
+            outinfo['limits'].append(outinfo['limits'][-1] + nr_of_slices)
             sstats.tofile(sstats_file)
 
+        if not aggregate:
+            outinfo['nr_descs'] = np.hstack(outinfo['nr_descs'])
+            outinfo['begin_frames'] = np.hstack(outinfo['begin_frames'])
+            outinfo['end_frames'] = np.hstack(outinfo['end_frames'])
+
         cPickle.dump(all_labels, labels_file)
+        cPickle.dump(outinfo, others_file)
         sstats_file.close()
         labels_file.close()
+        others_file.close()
 
     def _aggregate_sstats(self, sstats, nr_descs, len_sstats):
         sstats = sstats.reshape((-1, len_sstats))
