@@ -125,18 +125,21 @@ class SliceData(object):
             # Augment sufficient statistics with background information.
             low = limits[0]
             high = limits[-1]
-            sstats_list = [
-                self.sstats[low: high] * _normalize(
-                    self.scores[low: high, np.newaxis], limits - low),
-                self.sstats[low: high] * _normalize(
-                    1. - self.scores[low: high, np.newaxis], limits - low)
-            ]
+            # Trying to replicate initial results.
+            sstats_list = [self.sstats[low: high], self.sstats[low: high]]
+            #sstats_list = [
+            #    self.sstats[low: high] * _normalize(
+            #        self.scores[low: high, np.newaxis], limits - low),
+            #    self.sstats[low: high] * _normalize(
+            #        1. - self.scores[low: high, np.newaxis], limits - low)
+            #]
             #sstats_list = [
             #    chunk * chunk_scores[:, np.newaxis],
             #    chunk * (1. - chunk_scores[:, np.newaxis])]
             # Compute kernel.
             te_kernel = model.get_te_kernel(sstats_list)
             # Predict on them.
+            # TODO Pre-allocate!
             predictions.append(clf.predict(te_kernel))
         self.scores = np.hstack(predictions)
 
