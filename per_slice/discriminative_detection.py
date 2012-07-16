@@ -25,11 +25,15 @@ from fisher_vectors.model.fv_model import FVModel
 from fisher_vectors.preprocess.gmm import load_gmm
 
 
-NR_POS = 10
-NR_NEG = 10
-CHUNK_SIZE = 4
+NR_POS = 10000
+NR_NEG = 10000
+CHUNK_SIZE = 300
 RESULT_FILE = ('/home/lear/oneata/data/trecvid11/results/'
                'retrain_feature_pooling_with_background_info.txt')
+
+
+def usage():
+    pass
 
 
 def aggregate(sstats, weights, limits):
@@ -37,7 +41,6 @@ def aggregate(sstats, weights, limits):
     nr_features = sstats.shape[1]
     nr_samples = len(limits) - 1
     _weights = _normalize(weights, limits)
-    _weights = weights
     aggregated = np.zeros((nr_samples, nr_features))
     for ii, (low, high) in enumerate(izip(limits[: -1], limits[1:])):
         aggregated[ii, : nr_features] = _weighted_sum(
