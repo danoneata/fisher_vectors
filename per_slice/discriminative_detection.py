@@ -25,8 +25,8 @@ from fisher_vectors.model.fv_model import FVModel
 from fisher_vectors.preprocess.gmm import load_gmm
 
 
-NR_POS = 10#000
-NR_NEG = 10#000
+NR_POS = 10000
+NR_NEG = 10000
 CHUNK_SIZE = 300
 FILE = '/home/lear/oneata/tmp/train_per_video_class_%d_iteration_0.dat'
 RESULT_FILE = ('/home/lear/oneata/data/trecvid11/results/'
@@ -41,7 +41,10 @@ def aggregate(sstats, weights, limits):
     """ Aggregate sufficient statistics using given weights. """
     nr_features = sstats.shape[1]
     nr_samples = len(limits) - 1
+    # Use normalized weights.
     _weights = _normalize(weights, limits)
+    # Use un-normalized weights.
+    #_weights = weights
     aggregated = np.zeros((nr_samples, nr_features))
     for ii, (low, high) in enumerate(izip(limits[: -1], limits[1:])):
         aggregated[ii, : nr_features] = _weighted_sum(
@@ -104,12 +107,12 @@ class SliceData(object):
                 aggregate(self.sstats, 1. - self.scores, self.video_limits)]
 
     def get_aggregated_by_nr_descs(self):
-        #_nr_descs = _normalize(self.nr_descs, self.video_limits)
+        _nr_descs = _normalize(self.nr_descs, self.video_limits)
         #return [aggregate(self.sstats, _nr_descs, self.video_limits),
         #        aggregate(self.sstats, _nr_descs, self.video_limits)]
         #return [aggregate(self.sstats, self.nr_descs, self.video_limits),
         #        aggregate(self.sstats, self.nr_descs, self.video_limits)]
-        return aggregate(self.sstats, self.nr_descs, self.video_limits)
+        return aggregate(self.sstats, _nr_descs, self.video_limits)
 
     def get_sample_labels(self):
         sample_labels = []
@@ -119,21 +122,20 @@ class SliceData(object):
 
     def update_scores(self, clf, model):
         predictions = []
-        #for chunk, chunk_scores in izip(
-        #    chunker(self.sstats, CHUNK_SIZE),
-        #    chunker(self.scores, CHUNK_SIZE)):
         for limits in chunker(self.video_limits, CHUNK_SIZE):
             # Augment sufficient statistics with background information.
             low = limits[0]
             high = limits[-1]
-            # Trying to replicate initial results.
-            sstats_list = [self.sstats[low: high], self.sstats[low: high]]
+            # Use original slices, without weighting.
+            #sstats_list = [self.sstats[low: high], self.sstats[low: high]]
+            # Weight each slice by the normalized score.
             #sstats_list = [
             #    self.sstats[low: high] * _normalize(
             #        self.scores[low: high], limits - low)[:, np.newaxis],
             #    self.sstats[low: high] * _normalize(
             #        1. - self.scores[low: high], limits - low)[:, np.newaxis]
             #]
+            # Weight each slice by the un-normalized score.
             #sstats_list = [
             #    chunk * chunk_scores[:, np.newaxis],
             #    chunk * (1. - chunk_scores[:, np.newaxis])]
@@ -247,7 +249,7 @@ def discriminative_detection_worker(class_idx, **kwargs):
                 tr_sample_sstats = [ss, ss]
             else:
                 # Cache results.
-                xx = np.fromfile(
+                ss = np.fromfile(
                     outfile, dtype=np.float32).reshape((-1, model.D))
                 tr_sample_sstats = [ss, ss]
         else:
@@ -281,9 +283,9 @@ def discriminative_detection_worker(class_idx, **kwargs):
 def discriminative_detection(start_idx=0, end_idx=15):
     for ii in xrange(start_idx, end_idx):
         score = discriminative_detection_worker(ii)
-        #ff = open(RESULT_FILE, 'a')
-        #ff.write('Class %d score %2.3f\n' % (ii, score))
-        #ff.close()
+        ff = open(RESULT_FILE, 'a')
+        ff.write('Class %d score %2.3f\n' % (ii, score))
+        ff.close()
 
 
 def main():
