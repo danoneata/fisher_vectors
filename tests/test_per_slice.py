@@ -48,6 +48,7 @@ class TestPerSliceData():
         self.scores = np.array([10., 10., 20., 40., 40.])
         self.limits = np.array([0, 2, 5])
         self.norm_scores = np.array([0.5, 0.5, 0.2, 0.4, 0.4])
+        self.norm_scores_by_nr = np.array([5., 5., 20./3, 40./3, 40./3])
         self.sstats = np.array([
             [ 0.55104342,  0.25347533,  0.29457834],
             [ 0.97736164,  0.25547196,  0.77425607],
@@ -64,9 +65,12 @@ class TestPerSliceData():
         results = _normalize(self.scores, self.limits)
         assert_allclose(results, self.norm_scores)
 
+    def test_normalize_scores_by_number(self):
+        rr = _normalize(self.scores, self.limits, 'L0')
+        assert_allclose(rr, self.norm_scores_by_nr)
+
     def test_aggregate_sstats(self):
-        results = aggregate(self.sstats, self.norm_scores,
-                                       self.limits)
+        results = aggregate(self.sstats, self.norm_scores, self.limits)
         assert_allclose(results, self.aggregated_sstats)
 
     def test_chunk_normalization(self):
