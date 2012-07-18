@@ -3,6 +3,7 @@
 import getopt
 from ipdb import set_trace
 from itertools import izip
+import multiprocessing as mp
 import numpy as np
 import os
 import sys
@@ -241,7 +242,7 @@ class Evaluation(object):
         return score
 
 
-def discriminative_detection_worker(class_idx, **kwargs):
+def discriminative_detection_per_class(class_idx, **kwargs):
     max_nr_iter = kwargs.get('max_nr_iter', 1)
     dataset = kwargs.get('dataset', Dataset(
         'trecvid11_small', nr_clusters=128, suffix='.small.per_slice'))
@@ -306,8 +307,27 @@ def discriminative_detection_worker(class_idx, **kwargs):
 
 
 def discriminative_detection(start_idx=0, end_idx=15, **kwargs):
+    nr_processes = kwargs.get('nr_processes', 1)
+    classes_per_process = int(
+        np.ceil(float(end_idx - start_idx) / nr_processes))
+    processes = []
+
+    for ii in xrange(nr_processes):
+        ss = start_idx + ii * classes_per_process
+        ee = min(end_idx, start_idx + (ii + 1) * classes_per_process)
+        process = mp.Process(
+            target=discriminative_detection_worker, args=(ss, ee),
+            kwargs=kwargs)
+        processes.append(process)
+        process.start()
+
+    for process in processes:
+        process.join()
+
+
+def discriminative_detection_worker(start_idx, end_idx, **kwargs):
     for ii in xrange(start_idx, end_idx):
-        score = discriminative_detection_worker(ii, **kwargs)
+        score = discriminative_detection_per_class(ii, **kwargs)
         ff = open(RESULT_FILE, 'a')
         ff.write('Class %d score %2.3f\n' % (ii, score))
         ff.close()
@@ -318,7 +338,7 @@ def main():
         opt_pairs, _args = getopt.getopt(
             sys.argv[1:], "hs:e:",
             ["help", "start_idx=", "end_idx=", "use_nr_descs", "norm_type=",
-             "nr_pos=", "nr_neg="])
+             "nr_pos=", "nr_neg=", "nr_processes="])
     except getopt.GetoptError, err:
         print str(err)
         usage()
@@ -341,6 +361,8 @@ def main():
             kwargs['nr_pos'] = int(arg)
         elif opt in ("--nr_neg"):
             kwargs['nr_neg'] = int(arg)
+        elif opt in ("--nr_processes"):
+            kwargs['nr_processes'] = int(arg)
 
     discriminative_detection(start_idx, end_idx, **kwargs)
 
