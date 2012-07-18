@@ -54,19 +54,21 @@ def _weighted_sum(sstats, weights):
     return np.sum(sstats * weights[:, np.newaxis], axis=0)
 
 
+def _norm(values, norm_type):
+    assert norm_type in ('L0', 'L1')
+    if norm_type == 'L1':
+        return np.sum(values)
+    elif norm_type == 'L0':  # Not exactly L0.
+        return len(values)
+
+
 def _normalize(values, limits, norm_type='L1'):
     assert values.ndim == 1, "The values vector should be one-dimensional."
 
-    if norm_type == 'L1':
-        def _norm(xx): return np.sum(xx)
-    elif norm_type == 'L0':  # Not exactly the L0 norm.
-        def _norm(xx): return len(xx)
-    else:
-        raise Error('Unknown normalization type.')
-
     new_values = np.zeros_like(values)
     for low, high in izip(limits[: -1], limits[1:]):
-        new_values[low: high] = values[low: high] / _norm(values[low: high])
+        new_values[low: high] = values[low: high] / _norm(values[low: high],
+                                                          norm_type)
     return new_values
 
 
@@ -262,11 +264,13 @@ def discriminative_detection_worker(class_idx, **kwargs):
         model = Model(gmm)
         if ii == 0:
             if not os.path.exists(outfile):
+                print 'Aggregating statistics by the number of descriptors...'
                 ss = tr_slice_data.get_aggregated_by_nr_descs()
                 np.array(ss, dtype=np.float32).tofile(outfile)
                 #tr_sample_sstats = [ss, ss]
                 tr_sample_sstats = [ss] * 2
             else:
+                print 'Loaded aggregated statistics...'
                 # Cache results.
                 ss = np.fromfile(
                     outfile, dtype=np.float32).reshape((-1, model.D))
