@@ -25,8 +25,6 @@ from fisher_vectors.model.fv_model import FVModel
 from fisher_vectors.preprocess.gmm import load_gmm
 
 
-NR_POS = 10000
-NR_NEG = 10000
 CHUNK_SIZE = 300
 FILE = '/home/lear/oneata/tmp/train_per_video_class_%d_iteration_0.dat'
 RESULT_FILE = ('/home/lear/oneata/data/trecvid11/results/'
@@ -41,14 +39,10 @@ def aggregate(sstats, weights, limits):
     """ Aggregate sufficient statistics using given weights. """
     nr_features = sstats.shape[1]
     nr_samples = len(limits) - 1
-    # Use normalized weights.
-    _weights = _normalize(weights, limits)
-    # Use un-normalized weights.
-    #_weights = weights
     aggregated = np.zeros((nr_samples, nr_features))
     for ii, (low, high) in enumerate(izip(limits[: -1], limits[1:])):
         aggregated[ii, : nr_features] = _weighted_sum(
-            sstats[low: high], _weights[low: high])
+            sstats[low: high], weights[low: high])
     return aggregated
 
 
@@ -60,12 +54,19 @@ def _weighted_sum(sstats, weights):
     return np.sum(sstats * weights[:, np.newaxis], axis=0)
 
 
-def _normalize(values, limits):
+def _normalize(values, limits, norm_type='L1'):
     assert values.ndim == 1, "The values vector should be one-dimensional."
+
+    if norm_type == 'L1':
+        def _norm(xx): return np.sum(xx)
+    elif norm_type == 'L0':  # Not exactly the L0 norm.
+        def _norm(xx): return len(xx)
+    else:
+        raise Error('Unknown normalization type.')
+
     new_values = np.zeros_like(values)
     for low, high in izip(limits[: -1], limits[1:]):
-        new_values[low: high] = values[low: high] / np.sum(
-            values[low: high])
+        new_values[low: high] = values[low: high] / _norm(values[low: high])
     return new_values
 
 
@@ -77,9 +78,9 @@ def _extend_per_slice(values, limits):
     return extended_values
 
 
-def get_slice_data_from_file(dataset, split, class_idx, gmm):
-    samples = _get_samples(dataset, class_idx, data_type=split, nr_pos=NR_POS,
-                           nr_neg=NR_NEG)[0]
+def get_slice_data_from_file(dataset, split, class_idx, gmm, nr_pos, nr_neg):
+    samples = _get_samples(dataset, class_idx, data_type=split, nr_pos=nr_pos,
+                           nr_neg=nr_neg)[0]
     len_descs = gmm.k + 2 * gmm.d * gmm.k
     sstats, labels, info = SstatsMap(
         os.path.join(dataset.SSTATS_DIR, 'stats.tmp')).get_merged(
@@ -102,17 +103,25 @@ class SliceData(object):
         self.nr_slices, self.nr_features = self.sstats.shape
         self.scores = 0.5 * np.ones(self.nr_slices)  # Initial scores.
 
-    def get_aggregated(self):
-        return [aggregate(self.sstats, self.scores, self.video_limits),
-                aggregate(self.sstats, 1. - self.scores, self.video_limits)]
+    def get_aggregated(self, norm_type, use_nr_descs):
+        if use_nr_descs:
+            weights = _normalize(
+                self.scores * self.nr_descs, self.video_limits, norm_type)
+            weights_bar = _normalize(
+                (1. - self.scores) * self.nr_descs,
+                self.video_limits, norm_type)
+        else:
+            weights = _normalize(self.scores, self.video_limits, norm_type)
+            weights_bar = _normalize(1. - self.scores, self.video_limits,
+                                     norm_type)
+        
+        return [aggregate(self.sstats, weights, self.video_limits),
+                aggregate(self.sstats, weights_bar, self.video_limits)]
+                #aggregate(self.sstats, self.nr_descs, self.video_limits)]
 
     def get_aggregated_by_nr_descs(self):
-        _nr_descs = _normalize(self.nr_descs, self.video_limits)
-        #return [aggregate(self.sstats, _nr_descs, self.video_limits),
-        #        aggregate(self.sstats, _nr_descs, self.video_limits)]
-        #return [aggregate(self.sstats, self.nr_descs, self.video_limits),
-        #        aggregate(self.sstats, self.nr_descs, self.video_limits)]
-        return aggregate(self.sstats, _nr_descs, self.video_limits)
+        weights = _normalize(self.nr_descs, self.video_limits, 'L1')
+        return aggregate(self.sstats, weights, self.video_limits)
 
     def get_sample_labels(self):
         sample_labels = []
@@ -127,7 +136,9 @@ class SliceData(object):
             low = limits[0]
             high = limits[-1]
             # Use original slices, without weighting.
-            #sstats_list = [self.sstats[low: high], self.sstats[low: high]]
+            sstats_list = [self.sstats[low: high]] * 2
+            # Augmenting with original features.
+            #sstats_list = [self.sstats[low: high]] * 3
             # Weight each slice by the normalized score.
             #sstats_list = [
             #    self.sstats[low: high] * _normalize(
@@ -233,9 +244,16 @@ def discriminative_detection_worker(class_idx, **kwargs):
     dataset = kwargs.get('dataset', Dataset(
         'trecvid11_small', nr_clusters=128, suffix='.small.per_slice'))
     outfile = kwargs.get('outfile', FILE % class_idx)
+    nr_pos = kwargs.get('nr_pos', 10000)
+    nr_neg = kwargs.get('nr_neg', 10000)
+    norm_type = kwargs.get('norm_type', 'L1')
+    use_nr_descs = kwargs.get('use_nr_descs', False)
+
     gmm = load_gmm(dataset.GMM)
-    tr_slice_data = get_slice_data_from_file(dataset, 'train', class_idx, gmm)
-    te_slice_data = get_slice_data_from_file(dataset, 'test', class_idx, gmm)
+    tr_slice_data = get_slice_data_from_file(
+        dataset, 'train', class_idx, gmm, nr_pos, nr_neg)
+    te_slice_data = get_slice_data_from_file(
+        dataset, 'test', class_idx, gmm, nr_pos, nr_neg)
     tr_sample_labels = tr_slice_data.get_sample_labels()
     te_sample_labels = te_slice_data.get_sample_labels()
     for ii in xrange(max_nr_iter):
@@ -246,14 +264,17 @@ def discriminative_detection_worker(class_idx, **kwargs):
             if not os.path.exists(outfile):
                 ss = tr_slice_data.get_aggregated_by_nr_descs()
                 np.array(ss, dtype=np.float32).tofile(outfile)
-                tr_sample_sstats = [ss, ss]
+                #tr_sample_sstats = [ss, ss]
+                tr_sample_sstats = [ss] * 2
             else:
                 # Cache results.
                 ss = np.fromfile(
                     outfile, dtype=np.float32).reshape((-1, model.D))
-                tr_sample_sstats = [ss, ss]
+                #tr_sample_sstats = [ss, ss]
+                tr_sample_sstats = [ss] * 2
         else:
-            tr_sample_sstats = tr_slice_data.get_aggregated()
+            tr_sample_sstats = tr_slice_data.get_aggregated(
+                norm_type, use_nr_descs)
         # Fisher vectors on pooled features.
         tr_kernel = model.get_tr_kernel(tr_sample_sstats)
         # Train classifier on pooled features.
@@ -268,8 +289,8 @@ def discriminative_detection_worker(class_idx, **kwargs):
         del eval
         del model
     # Final retraining and evaluation.
-    tr_sample_sstats = tr_slice_data.get_aggregated()
-    te_sample_sstats = te_slice_data.get_aggregated()
+    tr_sample_sstats = tr_slice_data.get_aggregated(norm_type, use_nr_descs)
+    te_sample_sstats = te_slice_data.get_aggregated(norm_type, use_nr_descs)
     model = Model(gmm)
     tr_kernel = model.get_tr_kernel(tr_sample_sstats)
     te_kernel = model.get_te_kernel(te_sample_sstats)
@@ -280,9 +301,9 @@ def discriminative_detection_worker(class_idx, **kwargs):
     return score
 
 
-def discriminative_detection(start_idx=0, end_idx=15):
+def discriminative_detection(start_idx=0, end_idx=15, **kwargs):
     for ii in xrange(start_idx, end_idx):
-        score = discriminative_detection_worker(ii)
+        score = discriminative_detection_worker(ii, **kwargs)
         ff = open(RESULT_FILE, 'a')
         ff.write('Class %d score %2.3f\n' % (ii, score))
         ff.close()
@@ -292,12 +313,14 @@ def main():
     try:
         opt_pairs, _args = getopt.getopt(
             sys.argv[1:], "hs:e:",
-            ["help", "start_idx=", "end_idx="])
+            ["help", "start_idx=", "end_idx=", "use_nr_descs", "norm_type=",
+             "nr_pos=", "nr_neg="])
     except getopt.GetoptError, err:
         print str(err)
         usage()
         sys.exit(1)
 
+    kwargs = {}
     for opt, arg in opt_pairs:
         if opt in ("-h", "--help"):
             usage()
@@ -306,8 +329,16 @@ def main():
             start_idx = int(arg)
         elif opt in ("-e", "--end_idx"):
             end_idx = int(arg)
+        elif opt in ("--use_nr_descs"):
+            kwargs['use_nr_descs'] = True
+        elif opt in ("--norm_type"):
+            kwargs['norm_type'] = arg
+        elif opt in ("--nr_pos"):
+            kwargs['nr_pos'] = int(arg)
+        elif opt in ("--nr_neg"):
+            kwargs['nr_neg'] = int(arg)
 
-    discriminative_detection(start_idx, end_idx)
+    discriminative_detection(start_idx, end_idx, **kwargs)
 
 
 if __name__ == '__main__':
