@@ -47,7 +47,10 @@ def usage():
     print
     print "     -n, --n_components=NR_PCA_COMP"
     print "         Number of principal components. Default, 64."
-
+    print
+    print "     --suffix=SUFFIX"
+    print "         Suffix that is added to the default feature directory."
+    print "         Default, no suffix."
 
 def compute_pca_given_dataset(src_cfg, **kwargs):
     """ Uses the conventions from the dataset for loading a subset of
@@ -57,8 +60,9 @@ def compute_pca_given_dataset(src_cfg, **kwargs):
     # Set default parameters.
     ip_type = kwargs.get('ip_type', 'dense5.track15mbh')
     n_components = kwargs.get('n_components', 64)
+    suffix = kwargs.get('suffix', '')
 
-    dataset = Dataset(src_cfg, ip_type=ip_type)
+    dataset = Dataset(src_cfg, ip_type=ip_type, suffix=suffix)
     data = load_subsample_descriptors(dataset)
 
     # Do the computation.
@@ -73,7 +77,7 @@ def main():
     try:
         opt_pairs, args = getopt.getopt(
             sys.argv[1:], 'hd:i:n:',
-            ['help', 'dataset=', 'ip_type=', 'n_components='])
+            ['help', 'dataset=', 'ip_type=', 'n_components=', 'suffix='])
     except getopt.GetoptError, err:
         print str(err)
         usage()
@@ -90,6 +94,8 @@ def main():
             kwargs['ip_type'] = arg
         elif opt in ('-n', '--n_components'):
             kwargs['n_components'] = int(arg)
+        elif opt in ('--suffix'):
+            kwargs['suffix'] = arg
 
     compute_pca_given_dataset(src_cfg, **kwargs)
 
