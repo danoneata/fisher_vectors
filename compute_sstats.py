@@ -26,6 +26,9 @@ from utils.profile import profile
 
 from vidbase.vidplayer import get_video_infos
 
+from fisher_vectors.constants import MAX_WIDTH
+from fisher_vectors.utils.video import rescale
+
 
 def parse_ip_type(ip_type):
     """ Splits an ip_type string into arguments that are passable to Heng's
@@ -264,6 +267,7 @@ def compute_statistics_from_video_worker(dataset, samples, sstats_out,
     nr_frames_to_skip = kwargs.get('nr_frames_to_skip', 0)
     delta = kwargs.get('delta', 0)
     spacing = kwargs.get('spacing', 0)
+    rescale_videos = kwargs.get('rescale_videos', 'none')
 
     D = gmm.d
     K = dataset.VOC_SIZE
@@ -272,6 +276,12 @@ def compute_statistics_from_video_worker(dataset, samples, sstats_out,
         label = get_sample_label(dataset, sample)
         # The path to the movie.
         infile = os.path.join(dataset.SRC_DIR, sample.movie + dataset.SRC_EXT)
+
+        status, infile = rescale(infile, MAX_WIDTH[rescale_videos],
+                                 thresh=50)
+        if status == 'bad_encoding':
+            print 'Bad encoding ' + sample.movie
+            continue
 
         # Still not very nice. Maybe I should create the file on the else
         # branch.
@@ -336,10 +346,11 @@ def usage():
     print '         is set to the number of nodes on the cluster.'
     print
     print "     --delta=DELTA"
-    print "         Number of frames of a chunk (e.g., 120). Default 0."
+    print "         Number of frames of a chunk (e.g., 120). Default 0 (120"
+    print "         for the per_slice worker."
     print
     print "     --spacing=SPACING"
-    print "         Default 0."
+    print "         Default 0 (1 for the per_slice worker)."
     print
     print "     --nr_frames_to_skip=NR_FRAMES_TO_SKIP"
     print "         When computing descriptors, pick only one frame out of"
@@ -352,6 +363,13 @@ def usage():
     print
     print '     --suffix=SUFFIX'
     print '         Appends a suffix to the feature directory.' 
+    print
+    print "     --rescale_videos={'small', 'medium', 'large', 'none'}"
+    print "         Rescale video size on the fly:"
+    print "             - 'small': width <= 200"
+    print "             - 'medium': 200 <= width <= 500"
+    print "             - 'large': 500 <= width <= 1000"
+    print "             - 'none': original size of the videos."
     print
     # TODO
     print '     -g --grids=GRID'
@@ -384,7 +402,7 @@ def main():
             sys.argv[1:], "hd:i:m:k:o:w:",
             ["help", "dataset=", "ip_type=", "model=", "nr_clusters=",
              "nr_processes=", "delta=", "spacing=", "nr_frames_to_skip=",
-             "out_filename=", "worker=", "suffix="])
+             "out_filename=", "worker=", "suffix=", "rescale_videos="])
     except getopt.GetoptError, err:
         print str(err)
         usage()
@@ -415,6 +433,8 @@ def main():
             kwargs['outfilename'] = arg
         elif opt in ("w", "--worker"):
             kwargs['worker_type'] = arg
+        elif opt in ("--rescale_videos"):
+            kwargs['rescale_videos'] = arg
         elif opt in ("--suffix"):
             kwargs['suffix'] = arg
 
