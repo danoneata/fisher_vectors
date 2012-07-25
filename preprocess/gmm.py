@@ -50,6 +50,10 @@ def usage():
     print
     print "     -k, --nr_clusters=K"
     print "         Number of clusters in the GMM."
+    print
+    print "     --suffix=SUFFIX"
+    print "         Suffix that is added to the default feature directory."
+    print "         Default, no suffix."
 
 
 def compute_gmm_given_dataset(src_cfg, nr_clusters, **kwargs):
@@ -63,8 +67,9 @@ def compute_gmm_given_dataset(src_cfg, nr_clusters, **kwargs):
     nr_threads = kwargs.get('nr_threads', multiprocessing.cpu_count())
     seed = kwargs.get('seed', 1)
     nr_redos = kwargs.get('nr_redos', 4)
+    suffix = kwargs.get('suffix', '')
 
-    dataset = Dataset(src_cfg, ip_type=ip_type)
+    dataset = Dataset(src_cfg, ip_type=ip_type, suffix=suffix)
     filename_pca = os.path.join(dataset.FEAT_DIR, 'pca', 'pca_64.pkl')
 
     data = load_subsample_descriptors(dataset)
@@ -85,7 +90,7 @@ def main():
     try:
         opt_pairs, args = getopt.getopt(
             sys.argv[1:], 'hd:i:k:',
-            ['help', 'dataset=', 'ip_type=', 'nr_clusters='])
+            ['help', 'dataset=', 'ip_type=', 'nr_clusters=', 'suffix='])
     except getopt.GetoptError, err:
         print str(err)
         usage()
@@ -102,6 +107,8 @@ def main():
             kwargs['ip_type'] = arg
         elif opt in ('-n', '--nr_clusters'):
             nr_clusters = int(arg)
+        elif opt in ('--suffix'):
+            kwargs['suffix'] = arg
 
     compute_gmm_given_dataset(src_cfg, nr_clusters, **kwargs)
 
