@@ -168,7 +168,7 @@ def get_sample_label(dataset, sample):
     return label
 
 
-@profile
+#@profile
 def compute_statistics(src_cfg, **kwargs):
     """ Computes sufficient statistics needed for the bag-of-words or
     Fisher vector model.
@@ -277,11 +277,12 @@ def compute_statistics_from_video_worker(dataset, samples, sstats_out,
         # The path to the movie.
         infile = os.path.join(dataset.SRC_DIR, sample.movie + dataset.SRC_EXT)
 
-        status, infile = rescale(infile, MAX_WIDTH[rescale_videos],
-                                 thresh=50)
-        if status == 'bad_encoding':
-            print 'Bad encoding ' + sample.movie
-            continue
+        if rescale_videos != 'none':
+            status, infile = rescale(infile, MAX_WIDTH[rescale_videos],
+                                     thresh=50)
+            if status == 'bad_encoding':
+                print 'Bad encoding ' + sample.movie
+                continue
 
         # Still not very nice. Maybe I should create the file on the else
         # branch.

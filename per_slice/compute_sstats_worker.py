@@ -32,12 +32,13 @@ def compute_statistics_worker(dataset, samples, sstats_out, descs_to_sstats,
             dataset.SRC_DIR,
             sample.movie + dataset.SRC_EXT)
 
-        # Rescale movie.
-        status, infile = rescale(infile, MAX_WIDTH[rescale_videos],
-                                 thresh=50)
-        if status == 'bad_encoding':
-            print 'Bad encoding ' + sample.movie
-            continue
+        if rescale_videos != 'none':
+            # Rescale movie.
+            status, infile = rescale(infile, MAX_WIDTH[rescale_videos],
+                                     thresh=50)
+            if status == 'bad_encoding':
+                print 'Bad encoding ' + sample.movie
+                continue
 
         # Still not very nice. Maybe I should create the file on the else
         # branch.
