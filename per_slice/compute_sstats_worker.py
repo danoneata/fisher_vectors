@@ -38,6 +38,7 @@ def compute_statistics_worker(dataset, samples, sstats_out, descs_to_sstats,
             dataset.SRC_DIR,
             sample.movie + dataset.SRC_EXT)
 
+        status = None
         if rescale_videos != 'none':
             # Rescale movie.
             status, infile = rescale(infile, MAX_WIDTH[rescale_videos],
@@ -77,3 +78,6 @@ def compute_statistics_worker(dataset, samples, sstats_out, descs_to_sstats,
             'nr_descs': N,
             'begin_frames': begin_frames,
             'end_frames': end_frames})
+
+        if status == 'rescaled':
+            os.remove(infile)

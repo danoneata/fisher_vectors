@@ -283,6 +283,7 @@ def compute_statistics_from_video_worker(dataset, samples, sstats_out,
         # The path to the movie.
         infile = os.path.join(dataset.SRC_DIR, sample.movie + dataset.SRC_EXT)
 
+        status = None
         if rescale_videos != 'none':
             status, infile = rescale(infile, MAX_WIDTH[rescale_videos],
                                      thresh=50)
@@ -311,6 +312,10 @@ def compute_statistics_from_video_worker(dataset, samples, sstats_out,
         sstats /= N  # Normalize statistics.
         sstats_out.write(str(sample), sstats,
                          info={'label': label, 'nr_descs': N})
+
+        # Delete rescaled video.
+        if status == 'rescaled':
+            os.remove(infile)
 
 
 def usage():
