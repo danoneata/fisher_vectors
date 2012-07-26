@@ -273,6 +273,12 @@ def compute_statistics_from_video_worker(dataset, samples, sstats_out,
     K = dataset.VOC_SIZE
 
     for sample in samples:
+        # Still not very nice. Maybe I should create the file on the else
+        # branch.
+        if sstats_out.exists(str(sample)):
+            continue
+        sstats_out.touch(str(sample))
+
         label = get_sample_label(dataset, sample)
         # The path to the movie.
         infile = os.path.join(dataset.SRC_DIR, sample.movie + dataset.SRC_EXT)
@@ -283,12 +289,6 @@ def compute_statistics_from_video_worker(dataset, samples, sstats_out,
             if status == 'bad_encoding':
                 print 'Bad encoding ' + sample.movie
                 continue
-
-        # Still not very nice. Maybe I should create the file on the else
-        # branch.
-        if sstats_out.exists(str(sample)):
-            continue
-        sstats_out.touch(str(sample))
 
         begin_frames, end_frames = get_time_intervals(
             sample.bf, sample.ef, delta, spacing)
