@@ -339,12 +339,12 @@ def check_given_dataset(dataset, **kwargs):
     tr_samples = dataset.get_data('train')[0]
     str_tr_samples = list(set([str(sample) for sample in tr_samples]))
     tr_status = data.check(str_tr_samples, nr_clusters +
-                           2 * nr_clusters * NR_PCA_COMPONENTS)
+                           2 * nr_clusters * NR_PCA_COMPONENTS, **kwargs)
 
     te_samples = dataset.get_data('test')[0]
     str_te_samples = list(set([str(sample) for sample in te_samples]))
     te_status = data.check(str_te_samples, nr_clusters +
-                           2 * nr_clusters * NR_PCA_COMPONENTS)
+                           2 * nr_clusters * NR_PCA_COMPONENTS, **kwargs)
 
     if tr_status and te_status:
         print 'Checking done. Everything ok.'
@@ -374,6 +374,14 @@ def usage():
     print
     print '     --suffix=SUFFIX'
     print '         Appends a suffix to the standard feature path name.'
+    print
+    print '     --missing'
+    print '         When checking the sufficient statistics, prints only those'
+    print '         statistics that are missing.'
+    print
+    print '     --incorrect'
+    print '         When checking the sufficient statistics, prints only those'
+    print '         statistics that are incorrect, contain NaNs.'
 
 
 def main():
@@ -381,7 +389,7 @@ def main():
         opt_pairs, args = getopt.getopt(
             sys.argv[1:], "hd:k:t:o:",
             ["help", "dataset=", "nr_clusters=", "task=", "out_folder=",
-             "suffix="])
+             "suffix=", "missing", "incorrect"])
     except getopt.GetoptError, err:
         print str(err)
         usage()
@@ -403,6 +411,12 @@ def main():
             kwargs["outfolder"] = arg
         elif opt in ("--suffix"):
             suffix = arg
+        elif opt in ("--missing"):
+            kwargs["print_missing"] = True
+            kwargs["print_incorrect"] = False
+        elif opt in ("--incorrect"):
+            kwargs["print_missing"] = False
+            kwargs["print_incorrect"] = True
 
     if task not in ("check", "merge"):
         print "Unknown task."
