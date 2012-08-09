@@ -1,3 +1,4 @@
+from itertools import izip
 import numpy as np
 import os
 
@@ -10,8 +11,8 @@ from fisher_vectors.constants import MAX_WIDTH
 from fisher_vectors.utils.video import rescale
 
 
-def compute_statistics_worker(dataset, samples, sstats_out, descs_to_sstats,
-                              pca, gmm, **kwargs):
+def compute_statistics_worker(dataset, samples, labels, sstats_out,
+                              descs_to_sstats, pca, gmm, **kwargs):
     """ Computes the Fisher vectors for each slice that results from the
     temporal spliting of get_time_intervals. The resulting Fisher vectors
     are outputed to a binary file.
@@ -25,14 +26,13 @@ def compute_statistics_worker(dataset, samples, sstats_out, descs_to_sstats,
     D = gmm.d
     K = dataset.VOC_SIZE
 
-    for sample in samples:
+    for sample, label in izip(samples, labels):
         # Still not very nice. Maybe I should create the file on the else
         # branch.
         if sstats_out.exists(str(sample)):
             continue
         sstats_out.touch(str(sample))
 
-        label = get_sample_label(dataset, sample)
         # The path to the movie.
         infile = os.path.join(
             dataset.SRC_DIR,
