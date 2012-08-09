@@ -140,12 +140,10 @@ def get_slice_number(current_frame, begin_frames, end_frames):
     falls in.
 
     """
-    for ii, (begin_frame, end_frame) in enumerate(zip(begin_frames,
-                                                      end_frames)):
-        if begin_frame <= current_frame <= end_frame:
-            return ii
-    #return -1   # Why did you do this, past Dan? Maybe future Dan will explain.
-    raise Exception('Frame number not in the specified intervals.')
+    ii = np.searchsorted(begin_frames, current_frame, side='right') - 1
+    assert begin_frames[ii] <= current_frame <= end_frames[ii], (
+        "Current element outside range.")
+    return ii
 
 
 class DescriptorProcessor:
