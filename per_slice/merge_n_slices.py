@@ -139,7 +139,7 @@ def main():
         if opt in ("-h", "help"):
             usage()
             sys.exit(1)
-        elif opt in ("-n", "nr_processes"):
+        elif opt in ("-n", "--nr_processes"):
             nr_processes = int(arg)
     master(nr_processes)
 
