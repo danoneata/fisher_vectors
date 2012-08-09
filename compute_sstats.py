@@ -1,7 +1,9 @@
 #!/usr/bin/python
 from __future__ import division
 
+from collections import defaultdict
 import getopt
+from itertools import izip
 import multiprocessing
 import os
 import re
@@ -168,6 +170,23 @@ def get_sample_label(dataset, sample):
     return label
 
 
+def get_tupled_data(samples, labels):
+    """ Transforms the simple list of labels into a list of tuples. This is
+    performed for datasets that have multiple labels per sample. Returns the
+    set of the samples.
+
+    """
+    t_samples = []
+    t_labels = []
+    _dict = defaultdict(tuple)
+    for sample, label in izip(samples, labels):
+        _dict[str(sample)] += (label, )
+    for sample, label in _dict.iteritems():
+        t_samples.append(sample)
+        t_labels.append(label)
+    return t_samples,t_labels
+
+
 #@profile
 def compute_statistics(src_cfg, **kwargs):
     """ Computes sufficient statistics needed for the bag-of-words or
@@ -202,9 +221,11 @@ def compute_statistics(src_cfg, **kwargs):
 
     outfilename = kwargs.get('outfilename', 'stats.tmp')
 
-    train_samples = dataset.get_data('train')[0]
-    test_samples = dataset.get_data('test')[0]
-    samples = list(set(train_samples + test_samples))
+    train_samples, train_labels = dataset.get_data('train')
+    test_samples, test_labels = dataset.get_data('test')
+    _samples = train_samples + test_samples
+    _labels = train_labels + test_labels
+    samples, labels = get_tupled_data(_samples, _labels)
 
     sstats_out = SstatsMap(
         os.path.join(
@@ -221,6 +242,8 @@ def compute_statistics(src_cfg, **kwargs):
                     dataset,
                     samples[ii * nr_samples_per_process:
                             (ii + 1) * nr_samples_per_process],
+                    labels[ii * nr_samples_per_process:
+                           (ii + 1) * nr_samples_per_process],
                     sstats_out, descs_to_sstats, pca, gmm),
                 kwargs=kwargs)
             processes.append(process)
@@ -234,7 +257,7 @@ def compute_statistics(src_cfg, **kwargs):
                descs_to_sstats, pca, gmm, **kwargs)
 
 
-def compute_statistics_from_video_worker(dataset, samples, sstats_out,
+def compute_statistics_from_video_worker(dataset, samples, labels, sstats_out,
                                          descs_to_sstats, pca, gmm,
                                          **kwargs):
     """ Computes the Fisher vector directly from the video in an online
@@ -272,14 +295,13 @@ def compute_statistics_from_video_worker(dataset, samples, sstats_out,
     D = gmm.d
     K = dataset.VOC_SIZE
 
-    for sample in samples:
+    for sample, label in izip(samples, labels):
         # Still not very nice. Maybe I should create the file on the else
         # branch.
         if sstats_out.exists(str(sample)):
             continue
         sstats_out.touch(str(sample))
 
-        label = get_sample_label(dataset, sample)
         # The path to the movie.
         infile = os.path.join(dataset.SRC_DIR, sample.movie + dataset.SRC_EXT)
 
@@ -289,6 +311,7 @@ def compute_statistics_from_video_worker(dataset, samples, sstats_out,
                                      thresh=50)
             if status == 'bad_encoding':
                 print 'Bad encoding ' + sample.movie
+                sstats_out.remove(str(sample))
                 continue
 
         begin_frames, end_frames = get_time_intervals(
