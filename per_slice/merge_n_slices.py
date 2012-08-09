@@ -1,3 +1,4 @@
+#!/usr/bin/python
 """ Creates new sufficient statistics by averaging together sufficient
 statistics from N slices.
 
@@ -136,7 +137,7 @@ def main():
     
     nr_processes = mp.cpu_count()
     for opt, arg in opt_pairs:
-        if opt in ("-h", "help"):
+        if opt in ("-h", "--help"):
             usage()
             sys.exit(1)
         elif opt in ("-n", "--nr_processes"):
