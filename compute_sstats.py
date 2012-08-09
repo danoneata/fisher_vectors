@@ -18,6 +18,7 @@ from ipdb import set_trace
 
 from model import Model
 from dataset import Dataset
+from dataset import SampID
 from data import SstatsMap
 
 from preprocess.pca import load_pca
@@ -182,7 +183,7 @@ def get_tupled_data(samples, labels):
     for sample, label in izip(samples, labels):
         _dict[str(sample)] += (label, )
     for sample, label in _dict.iteritems():
-        t_samples.append(sample)
+        t_samples.append(SampID(sample))
         t_labels.append(label)
     return t_samples,t_labels
 
