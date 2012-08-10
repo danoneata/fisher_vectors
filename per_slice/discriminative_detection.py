@@ -106,14 +106,25 @@ class SliceData(object):
         self.nr_slices, self.nr_features = self.sstats.shape
         self.scores = 0.5 * np.ones(self.nr_slices)  # Initial scores.
 
-    def get_aggregated(self, norm_type, use_nr_descs):
-        if use_nr_descs:
-            weights = _normalize(
-                self.scores * self.nr_descs, self.video_limits, norm_type)
-            weights_bar = _normalize(
-                (1. - self.scores) * self.nr_descs,
-                self.video_limits, norm_type)
+    def get_aggregated(self, agg_type, use_nr_descs):
+        if use_nr_descs: 
+            norm_type = 'L1'
+            if agg_type == 'norm':
+                weights = _normalize(
+                    self.scores * self.nr_descs, self.video_limits, norm_type)
+                weights_bar = _normalize(
+                    (1. - self.scores) * self.nr_descs,
+                    self.video_limits, norm_type)
+            elif agg_type == 'unnorm':
+                norm_nr_descs = _normalize(
+                    self.nr_descs, self.video_limits, 'L1')
+                weights = self.scores * norm_nr_descs
+                weights_bar = (1 - self.scores) * norm_nr_descs
         else:
+            if agg_type == 'norm':
+                norm_type = 'L1'
+            elif agg_type == 'unnorm':
+                norm_type = 'L0'
             weights = _normalize(self.scores, self.video_limits, norm_type)
             weights_bar = _normalize(1. - self.scores, self.video_limits,
                                      norm_type)
@@ -249,8 +260,10 @@ def discriminative_detection_per_class(class_idx, **kwargs):
     outfile = kwargs.get('outfile', FILE % class_idx)
     nr_pos = kwargs.get('nr_pos', 10000)
     nr_neg = kwargs.get('nr_neg', 10000)
-    norm_type = kwargs.get('norm_type', 'L1')
+    agg_type = kwargs.get('agg_type', 'norm')
     use_nr_descs = kwargs.get('use_nr_descs', False)
+
+    assert agg_type in ('norm', 'unnorm'), "Unknown aggregation type."
 
     gmm = load_gmm(dataset.GMM)
     tr_slice_data = get_slice_data_from_file(
@@ -279,29 +292,29 @@ def discriminative_detection_per_class(class_idx, **kwargs):
                 tr_sample_sstats = [ss] * 2
         else:
             tr_sample_sstats = tr_slice_data.get_aggregated(
-                norm_type, use_nr_descs)
+                agg_type, use_nr_descs)
         # Fisher vectors on pooled features.
         tr_kernel = model.get_tr_kernel(tr_sample_sstats)
         # Train classifier on pooled features.
-        eval = Evaluation()
-        eval = eval.fit(tr_kernel, tr_sample_labels)
+        _eval = Evaluation()
+        _eval = _eval.fit(tr_kernel, tr_sample_labels)
         # Update weights.
-        tr_slice_data.update_scores(eval, model)
-        te_slice_data.update_scores(eval, model)
+        tr_slice_data.update_scores(_eval, model)
+        te_slice_data.update_scores(_eval, model)
         # TODO Save data.
         tr_slice_data.save_htlist(ii)
         te_slice_data.save_htlist(ii)
-        del eval
+        del _eval
         del model
     # Final retraining and evaluation.
-    tr_sample_sstats = tr_slice_data.get_aggregated(norm_type, use_nr_descs)
-    te_sample_sstats = te_slice_data.get_aggregated(norm_type, use_nr_descs)
+    tr_sample_sstats = tr_slice_data.get_aggregated(agg_type, use_nr_descs)
+    te_sample_sstats = te_slice_data.get_aggregated(agg_type, use_nr_descs)
     model = Model(gmm)
     tr_kernel = model.get_tr_kernel(tr_sample_sstats)
     te_kernel = model.get_te_kernel(te_sample_sstats)
-    eval = Evaluation()
-    eval = eval.fit(tr_kernel, tr_sample_labels)
-    score = eval.score(te_kernel, te_sample_labels)
+    _eval = Evaluation()
+    _eval = _eval.fit(tr_kernel, tr_sample_labels)
+    score = _eval.score(te_kernel, te_sample_labels)
     print 'Class %d score %2.3f' % (class_idx, score)
     return score
 
@@ -337,7 +350,7 @@ def main():
     try:
         opt_pairs, _args = getopt.getopt(
             sys.argv[1:], "hs:e:",
-            ["help", "start_idx=", "end_idx=", "use_nr_descs", "norm_type=",
+            ["help", "start_idx=", "end_idx=", "use_nr_descs", "agg_type=",
              "nr_pos=", "nr_neg=", "nr_processes="])
     except getopt.GetoptError, err:
         print str(err)
@@ -355,8 +368,8 @@ def main():
             end_idx = int(arg)
         elif opt in ("--use_nr_descs"):
             kwargs['use_nr_descs'] = True
-        elif opt in ("--norm_type"):
-            kwargs['norm_type'] = arg
+        elif opt in ("--agg_type"):
+            kwargs['agg_type'] = arg
         elif opt in ("--nr_pos"):
             kwargs['nr_pos'] = int(arg)
         elif opt in ("--nr_neg"):
