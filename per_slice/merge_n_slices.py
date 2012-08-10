@@ -39,10 +39,12 @@ def merge(filenames, sstats_in, sstats_out, N, len_sstats):
 
     """
     for filename in filenames:
+        if sstats_out.exists(filename):
+            continue
+
         sstats = sstats_in.read(filename).reshape((-1, len_sstats))
         info = sstats_in.read_info(filename)
 
-        print filename
         agg_sstats, agg_info = _aggregate(sstats, info, N) 
         sstats_out.write(filename, agg_sstats, info=agg_info)
 
