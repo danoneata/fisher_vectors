@@ -254,7 +254,7 @@ def compute_statistics(src_cfg, **kwargs):
             process.join()
     else:
         # We use this special case, because it makes possible to debug.
-        worker(dataset, samples, sstats_out,
+        worker(dataset, samples, labels, sstats_out,
                descs_to_sstats, pca, gmm, **kwargs)
 
 
