@@ -42,6 +42,10 @@ def merge(filenames, sstats_in, sstats_out, N, len_sstats):
         if sstats_out.exists(filename):
             continue
 
+        if not sstats_in.exists(filename):
+            print filename
+            continue
+
         sstats = sstats_in.read(filename).reshape((-1, len_sstats))
         info = sstats_in.read_info(filename)
 
