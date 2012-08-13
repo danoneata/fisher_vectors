@@ -76,6 +76,11 @@ class SstatsMap(object):
         data_file = os.path.join(self.basepath, filename + self.data_ext)
         os.system('touch %s' % data_file)
 
+    def remove(self, filename):
+        """ Removes the file with the given filename. """
+        data_file = os.path.join(self.basepath, filename + self.data_ext)
+        os.system('rm -f %s' % data_file)
+
     def exists(self, filename):
         """ Checks whether the file exists or not. """
         data_file = os.path.join(self.basepath, filename + self.data_ext)
