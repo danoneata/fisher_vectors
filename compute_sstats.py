@@ -401,6 +401,11 @@ def usage():
     print "             - 'large': 500 <= width <= 1000"
     print "             - 'none': original size of the videos."
     print
+    print "     --shots_dir=DIR"
+    print "         If `shots_dir` is specified, in the `per_slice` case, the"
+    print "         slices will be determined from the shots. The arguments"
+    print "         `delta` and `spacing` will be ignored."
+    print
     # TODO
     print '     -g --grids=GRID'
     print '         Specify the type of spatial pyramids used. The argument'
@@ -432,7 +437,8 @@ def main():
             sys.argv[1:], "hd:i:m:k:o:w:",
             ["help", "dataset=", "ip_type=", "model=", "nr_clusters=",
              "nr_processes=", "delta=", "spacing=", "nr_frames_to_skip=",
-             "out_filename=", "worker=", "suffix=", "rescale_videos="])
+             "out_filename=", "worker=", "suffix=", "rescale_videos=",
+             "shots_dir="])
     except getopt.GetoptError, err:
         print str(err)
         usage()
@@ -467,6 +473,8 @@ def main():
             kwargs['rescale_videos'] = arg
         elif opt in ("--suffix"):
             kwargs['suffix'] = arg
+        elif opt in ("--shots_dir"):
+            kwargs['shots_dir'] = arg
 
     compute_statistics(src_cfg, **kwargs)
 

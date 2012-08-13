@@ -1,6 +1,7 @@
 from itertools import izip
 import numpy as np
 import os
+import subprocess
 
 from fisher_vectors.compute_sstats import get_sample_label
 from fisher_vectors.compute_sstats import get_time_intervals
@@ -9,6 +10,28 @@ from fisher_vectors.compute_sstats import read_descriptors_from_video
 
 from fisher_vectors.constants import MAX_WIDTH
 from fisher_vectors.utils.video import rescale
+
+
+def get_slices_from_shots(shot_dir, filename):
+    """ Returns begin and end frames corresponding to the shots in the video.
+
+    I assume the format used by Matthijs: zip files with the shots data in the
+    <movie>_shot.txt file.
+
+    """
+    ext = '.zip'
+    shots_zip = os.path.join(shot_dir, filename + ext)
+    unzip = subprocess.Popen(
+        ['unzip', '-p', shots_zip, '*shot.txt'],
+        stdout=subprocess.PIPE)
+
+    begin_frames, end_frames = [], []
+    for line in unzip.stdout.readlines():
+        begin_frame, end_frame = line.split()
+        begin_frames.append(int(begin_frame) + 1)
+        end_frames.append(int(end_frame) + 1)
+    return begin_frames, end_frames
+
 
 
 def compute_statistics_worker(dataset, samples, labels, sstats_out,
@@ -22,6 +45,7 @@ def compute_statistics_worker(dataset, samples, labels, sstats_out,
     delta = kwargs.get('delta', 120)
     spacing = kwargs.get('spacing', 1)
     rescale_videos = kwargs.get('rescale_videos', 'none')
+    shots_dir = kwargs.get('shots_dir', None)
 
     D = gmm.d
     K = dataset.VOC_SIZE
@@ -47,8 +71,12 @@ def compute_statistics_worker(dataset, samples, labels, sstats_out,
                 print 'Bad encoding ' + sample.movie
                 continue
 
-        begin_frames, end_frames = get_time_intervals(
-            sample.bf, sample.ef, delta, spacing)
+        if shots_dir:
+            begin_frames, end_frames = get_slices_from_shots(
+                shots_dir, sample.movie)
+        else:
+            begin_frames, end_frames = get_time_intervals(
+                sample.bf, sample.ef, delta, spacing)
 
         # Count the number of descriptors for each chunk.
         nr_slices = len(begin_frames)
