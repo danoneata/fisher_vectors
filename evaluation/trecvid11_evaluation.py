@@ -2,12 +2,14 @@ import numpy as np
 from numpy import arange, array, ceil, Inf, mean
 from sklearn import svm
 from sklearn.grid_search import GridSearchCV
+from sklearn.preprocessing import LabelBinarizer
 from sklearn.cross_validation import StratifiedShuffleSplit
 from ipdb import set_trace
 
 from .base_evaluation import BaseEvaluation
 from utils import tuple_labels_to_list_labels
 from utils import average_precision
+#from utils import calc_ap as average_precision # Danila's metric.
 import result_file_functions as rff
 
 
@@ -18,29 +20,89 @@ class TrecVid11Evaluation(BaseEvaluation):
     """
     def __init__(self, **kwargs):
         self.null_class_idx = 15
-        self.scenario = kwargs.get('eval_type', 'multiclass')
-        assert self.scenario in ('multiclass', 'versus_null')
+        self.scenario = kwargs.get('eval_type', 'versus_null_sklearn')
+        assert self.scenario in ('multiclass', 'versus_null',
+                                 'versus_null_sklearn')
 
     def fit(self, Kxx, cx):
-        cx = tuple_labels_to_list_labels(cx)
         if self.scenario == 'multiclass':
+            cx = tuple_labels_to_list_labels(cx)
             self._fit_one_vs_one(Kxx, cx)
         elif self.scenario == 'versus_null':
+            cx = tuple_labels_to_list_labels(cx)
             self._fit_one_vs_rest(Kxx, cx)
+        elif self.scenario == 'versus_null_sklearn':
+            cx = tuple_labels_to_list_labels(cx)
+            self._fit_one_vs_rest_sklearn(Kxx, cx)
         return self
 
     def score(self, Kyx, cy):
-        cy = tuple_labels_to_list_labels(cy)
         if self.scenario == 'multiclass':
+            cy = tuple_labels_to_list_labels(cy)
             return self._score_one_vs_one(Kyx, cy)
         elif self.scenario == 'versus_null':
+            cy = tuple_labels_to_list_labels(cy)
             return self._score_one_vs_rest(Kyx, cy)
+        elif self.scenario == 'versus_null_sklearn':
+            cy = tuple_labels_to_list_labels(cy)
+            return self._score_one_vs_rest_sklearn(Kyx, cy)
 
     def predict(self, Kyx, cy):
         cy = tuple_labels_to_list_labels(cy)
         if self.scenario == 'multiclass':
             return self._predict_one_vs_one(Kyx, cy)
         return None
+    
+    def _fit_one_vs_rest_sklearn(self, Kxx, cx):
+        """ Fits one-vs-rest classifier and crossvalidates using sklearn. """
+        self.nr_classes = len(set(cx))
+        self.clf = []
+        self.cx_idxs = []
+        for ii in xrange(self.nr_classes - 1):
+            # Slice only the elements with index ii and null_class_idx.
+            good_idxs = (cx == ii) | (cx == self.null_class_idx)
+            self.cx_idxs.append(good_idxs)
+
+            K_good_idxs = np.ix_(good_idxs, good_idxs)
+            # Get a +1, -1 vector of labels.
+            cx_ = map(lambda label: +1 if label != self.null_class_idx else -1,
+                      cx[good_idxs])
+
+            my_svm = svm.SVC(kernel='precomputed', probability=True,
+                             class_weight='auto')
+
+            c_values = np.power(3.0, np.arange(-2, 8))
+            tuned_parameters = [{'C': c_values}]
+
+            cx_ = np.array(cx_)
+            splits = StratifiedShuffleSplit(cx_, 3, test_size=0.25,
+                                            random_state=0)
+
+            self.clf.append(
+                GridSearchCV(my_svm, tuned_parameters,
+                             score_func=average_precision,
+                             cv=splits, n_jobs=4))
+            self.clf[ii].fit(Kxx[K_good_idxs], cx_)
+
+        return self
+
+    def _score_one_vs_rest_sklearn(self, Kyx, cy):
+        """ Returns the mean average precision score. """
+        ap_scores = np.zeros(self.nr_classes - 1)
+        for ii in xrange(self.nr_classes - 1):
+        #for ii in xrange(1):
+            good_idxs = (cy == ii) | (cy == self.null_class_idx)
+            K_good_idxs = np.ix_(good_idxs, self.cx_idxs[ii])
+
+            # Get a +1, -1 vector of labels.
+            cy_ = map(lambda label: +1 if label == ii else -1, cy[good_idxs])
+            # Predict.
+            predicted_values = self.clf[ii].predict_proba(Kyx[K_good_idxs])[:, 1]
+            ap_scores[ii] = average_precision(
+                cy_, predicted_values)
+            #print "%d sklearn %2.3f" % (ii, 100 * ap_scores[ii])
+            print 'Class #%d, test score: %2.3f' % (ii, 100 * ap_scores[ii])
+        return np.mean(ap_scores) * 100
 
     def _fit_one_vs_rest(self, Kxx, cx):
         """ Fits a one-vs-null SVM classifier. """
@@ -70,6 +132,7 @@ class TrecVid11Evaluation(BaseEvaluation):
             self.clf[ii].C = C
             self.clf[ii].fit(Kxx[K_good_idxs], cx_,
                              sample_weight=weight)
+        return self
 
     def _score_one_vs_rest(self, Kyx, cy):
         """ Score each class against the rest 15. I don't have a NULL class for
@@ -77,7 +140,7 @@ class TrecVid11Evaluation(BaseEvaluation):
 
         """
         cy = np.array(cy)
-        average_precision = np.zeros(self.nr_classes - 1)
+        ap_scores = np.zeros(self.nr_classes - 1)
 
         print
         for ii in xrange(self.nr_classes - 1):
@@ -91,12 +154,12 @@ class TrecVid11Evaluation(BaseEvaluation):
             # Predict.
             confidence_values = self.clf[ii].predict_proba(
                 Kyx[K_good_idxs])[:, 1]
-            average_precision[ii] = rff.get_ap(confidence_values, cy_)
+            ap_scores[ii] = rff.get_ap(confidence_values, cy_)
 
             print "Score for class %d as positive is %2.4f MAP." % (
-                ii, average_precision[ii])
+                ii, ap_scores[ii])
 
-        return mean(average_precision) * 100
+        return mean(ap_scores) * 100
 
     def _crossvalidate_C_one_vs_rest(self, K, cc, idx_clf):
         # TODO Try to avoid duplication of some of this code.
@@ -161,6 +224,8 @@ class TrecVid11Evaluation(BaseEvaluation):
             Kxx[K_good_idxs], cx[good_idxs])
         self.clf.fit(Kxx[K_good_idxs], cx[good_idxs])
         self.cx_idxs = good_idxs
+
+        return self
 
     def _score_one_vs_one(self, Kyx, cy):
         cy = np.array(cy)
