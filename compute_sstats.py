@@ -334,8 +334,12 @@ def compute_statistics_from_video_worker(dataset, samples, labels, sstats_out,
             N += chunk_size
 
         sstats /= N  # Normalize statistics.
-        sstats_out.write(str(sample), sstats,
-                         info={'label': label, 'nr_descs': N})
+        sstats_out.write(str(sample), sstats, info={
+            'label': label,
+            'nr_descs': np.array([N]),
+            'begin_frames': np.array([sample.bf]),
+            'end_frames': np.array([sample.ef])
+        })
 
         # Delete rescaled video.
         if status == 'rescaled':
