@@ -1,6 +1,6 @@
 import numpy as np
 from numpy import arange, array, ceil, Inf, mean
-from sklearn import svm
+from sklearn.svm import SVC
 from sklearn.grid_search import GridSearchCV
 from sklearn.preprocessing import LabelBinarizer
 from sklearn.cross_validation import StratifiedShuffleSplit
@@ -11,6 +11,11 @@ from utils import tuple_labels_to_list_labels
 from utils import average_precision
 #from utils import calc_ap as average_precision # Danila's metric.
 import result_file_functions as rff
+
+
+class MySVC(SVC):
+    def predict(self, X):
+        return self.decision_function(X)
 
 
 class TrecVid12Evaluation(BaseEvaluation):
@@ -43,7 +48,7 @@ class TrecVid12Evaluation(BaseEvaluation):
             cx_ = map(lambda label: +1 if label != self.null_class_idx else -1,
                       cx[good_idxs])
 
-            my_svm = svm.SVC(kernel='precomputed', probability=True,
+            my_svm = MySVC(kernel='precomputed', probability=True,
                              class_weight='auto')  #{+1: 0.95, -1: 0.05})
 
             c_values = np.power(3.0, np.arange(-2, 8))
