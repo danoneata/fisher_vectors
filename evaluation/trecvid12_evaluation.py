@@ -1,16 +1,12 @@
 import numpy as np
-from numpy import arange, array, ceil, Inf, mean
 from sklearn.svm import SVC
 from sklearn.grid_search import GridSearchCV
-from sklearn.preprocessing import LabelBinarizer
 from sklearn.cross_validation import StratifiedShuffleSplit
 from ipdb import set_trace
 
 from .base_evaluation import BaseEvaluation
-from utils import tuple_labels_to_list_labels
 from utils import average_precision
 #from utils import calc_ap as average_precision # Danila's metric.
-import result_file_functions as rff
 
 
 class MySVC(SVC):
@@ -21,19 +17,13 @@ class MySVC(SVC):
 class TrecVid12Evaluation(BaseEvaluation):
     def __init__(self, **kwargs):
         self.null_class_idx = kwargs.get('null_class_idx', 0)
-        self.scenario = kwargs.get('eval_type', 'trecvid11')
+        c_values = np.power(3.0, np.arange(-2, 8))
+        #weights = [{+1: ww / (ww + 1), -1: 1 / (ww + 1)}
+        #           for ww in np.power(2.0, np.arange(0,7))]
+        #weights.append('auto')
+        self.tuned_parameters = [{'C': c_values}]
 
     def fit(self, Kxx, cx):
-        if self.scenario == 'trecvid11':
-            self.null_class_idx = 0
-            self.fit_trecvid11(Kxx, cx)
-        return self
-
-    def score(self, Kyx, cy):
-        if self.scenario == 'trecvid11':
-            return self.score_trecvid11(Kyx, cy)
-        
-    def fit_trecvid11(self, Kxx, cx):
         """ Fits one-vs-rest classifier as for TrecVid 11. """
         self.nr_classes = len(set(cx))
         self.clf = []
@@ -51,24 +41,18 @@ class TrecVid12Evaluation(BaseEvaluation):
             my_svm = MySVC(kernel='precomputed', probability=True,
                              class_weight='auto')  #{+1: 0.95, -1: 0.05})
 
-            c_values = np.power(3.0, np.arange(-2, 8))
-            #weights = [{+1: ww / (ww + 1), -1: 1 / (ww + 1)}
-            #           for ww in np.power(2.0, np.arange(0,7))]
-            #weights.append('auto')
-            tuned_parameters = [{'C': c_values}]
-
             cx_ = np.array(cx_)
             splits = StratifiedShuffleSplit(cx_, 3, test_size=0.25,
                                             random_state=0)
 
             self.clf.append(
-                GridSearchCV(my_svm, tuned_parameters,
+                GridSearchCV(my_svm, self.tuned_parameters,
                              score_func=average_precision,
                              cv=splits, n_jobs=4))
             self.clf[ii].fit(Kxx[K_good_idxs], cx_)
         return self
 
-    def score_trecvid11(self, Kyx, cy):
+    def score(self, Kyx, cy):
         """ Returns the mean average precision score. """
         ap_scores = np.zeros(self.nr_classes - 1)
         for ii, class_idx in enumerate(xrange(1, 16)):
