@@ -312,7 +312,7 @@ def compute_statistics_from_video_worker(dataset, samples, labels, sstats_out,
                                      thresh=50)
             if status == 'bad_encoding':
                 print 'Bad encoding ' + sample.movie
-                sstats_out.remove(str(sample))
+                #sstats_out.remove(str(sample))
                 continue
 
         begin_frames, end_frames = get_time_intervals(
