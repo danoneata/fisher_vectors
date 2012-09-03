@@ -2,6 +2,7 @@
 import cPickle
 from collections import defaultdict
 import getopt
+from ipdb import set_trace
 import os
 import sys
 import numpy as np
@@ -86,6 +87,11 @@ class SstatsMap(object):
         data_file = os.path.join(self.basepath, filename + self.data_ext)
         return os.path.exists(data_file)
 
+    def getsize(self, filename):
+        """ Checks whether the file exists or not. """
+        data_file = os.path.join(self.basepath, filename + self.data_ext)
+        return os.path.getsize(data_file)
+
     def read(self, filename):
         """ Reads data from file. """
         complete_path = os.path.join(self.basepath, filename)
@@ -134,17 +140,23 @@ class SstatsMap(object):
         incorrect_files = []
 
         for filename in filenames:
-            try:
-                data = self.read(filename)
-                nr_elems = len(data)
-                if (nr_elems == 0 or
-                    nr_elems % len_sstats != 0 or
-                    np.isnan(np.max(data))):
-                    status = False
-                    incorrect_files.append(filename + self.data_ext)
-            except IOError:
+            if not self.exists(filename):
                 status = False
                 missing_files.append(filename + self.data_ext)
+            elif self.getsize(filename) == 0:
+                status = False
+                incorrect_files.append(filename + self.data_ext)
+            #try:
+            #    data = self.read(filename)
+            #    nr_elems = len(data)
+            #    if (nr_elems == 0 or
+            #        nr_elems % len_sstats != 0 or
+            #        np.isnan(np.max(data))):
+            #        status = False
+            #        incorrect_files.append(filename + self.data_ext)
+            #except IOError:
+            #    status = False
+            #    missing_files.append(filename + self.data_ext)
 
         if print_incorrect:
             print 'Incorrect values in the following files:'
@@ -275,7 +287,6 @@ class SstatsMap(object):
                 outinfo['end_frames'].append(info['end_frames'][-1])
             else:
                 outinfo['nr_descs'].append(nr_descs[nr_descs != 0])
-                from ipdb import set_trace
                 outinfo['begin_frames'].append(
                     np.array(info['begin_frames'])[nr_descs != 0])
                 outinfo['end_frames'].append(
@@ -318,20 +329,22 @@ def merge_given_dataset(dataset, **kwargs):
 
     """
     basepath = os.path.join(dataset.SSTATS_DIR, 'stats.tmp')
-    outfolder = dataset.SSTATS_DIR
     data = SstatsMap(basepath)
     nr_clusters = dataset.VOC_SIZE
+    kwargs['outfolder'] = dataset.SSTATS_DIR
 
     tr_samples = dataset.get_data('train')[0]
-    str_tr_samples = list(set([str(sample) for sample in tr_samples]))
+    #str_tr_samples = list(set([str(sample) for sample in tr_samples]))
+    str_tr_samples = ([str(sample) for sample in tr_samples])
     data.merge(str_tr_samples, 'train', nr_clusters +
-               2 * nr_clusters * NR_PCA_COMPONENTS, outfolder=outfolder)
+               2 * nr_clusters * NR_PCA_COMPONENTS, **kwargs)
     print "Merged train data."
 
     te_samples = dataset.get_data('test')[0]
-    str_te_samples = list(set([str(sample) for sample in te_samples]))
+    #str_te_samples = list(set([str(sample) for sample in te_samples]))
+    str_te_samples = ([str(sample) for sample in te_samples])
     data.merge(str_te_samples, 'test', nr_clusters +
-               2 * nr_clusters * NR_PCA_COMPONENTS, outfolder=outfolder)
+               2 * nr_clusters * NR_PCA_COMPONENTS, **kwargs)
     print "Merged test data."
 
 
@@ -394,7 +407,7 @@ def main():
         opt_pairs, args = getopt.getopt(
             sys.argv[1:], "hd:k:t:o:",
             ["help", "dataset=", "nr_clusters=", "task=", "out_folder=",
-             "suffix=", "missing", "incorrect"])
+             "suffix=", "missing", "incorrect", "aggregate"])
     except getopt.GetoptError, err:
         print str(err)
         usage()
@@ -422,6 +435,8 @@ def main():
         elif opt in ("--incorrect"):
             kwargs["print_missing"] = False
             kwargs["print_incorrect"] = True
+        elif opt in ("--aggregate"):
+            kwargs["aggregate"] = True
 
     if task not in ("check", "merge"):
         print "Unknown task."
