@@ -51,6 +51,9 @@ def usage():
     print "     -k, --nr_clusters=K"
     print "         Number of clusters in the GMM."
     print
+    print "     -n, --nr_pca_components=N"
+    print "         Number of PCA components, default 64."
+    print
     print "     --suffix=SUFFIX"
     print "         Suffix that is added to the default feature directory."
     print "         Default, no suffix."
@@ -68,9 +71,10 @@ def compute_gmm_given_dataset(src_cfg, nr_clusters, **kwargs):
     seed = kwargs.get('seed', 1)
     nr_redos = kwargs.get('nr_redos', 4)
     suffix = kwargs.get('suffix', '')
+    nr_pca_components = kwargs.get('nr_pca_components', 64)
 
     dataset = Dataset(src_cfg, ip_type=ip_type, suffix=suffix)
-    filename_pca = os.path.join(dataset.FEAT_DIR, 'pca', 'pca_64.pkl')
+    filename_pca = os.path.join(dataset.FEAT_DIR, 'pca', 'pca_%d.pkl' % nr_pca_components)
 
     data = load_subsample_descriptors(dataset)
     pca = load_pca(filename_pca)
@@ -89,7 +93,7 @@ def compute_gmm_given_dataset(src_cfg, nr_clusters, **kwargs):
 def main():
     try:
         opt_pairs, args = getopt.getopt(
-            sys.argv[1:], 'hd:i:k:',
+            sys.argv[1:], 'hd:i:k:n:',
             ['help', 'dataset=', 'ip_type=', 'nr_clusters=', 'suffix='])
     except getopt.GetoptError, err:
         print str(err)
@@ -105,8 +109,10 @@ def main():
             src_cfg = arg
         elif opt in ('-i', '--ip_type'):
             kwargs['ip_type'] = arg
-        elif opt in ('-n', '--nr_clusters'):
+        elif opt in ('-k', '--nr_clusters'):
             nr_clusters = int(arg)
+        elif opt in ('-n', '--nr_pca_components'):
+            kwargs['nr_pca_components'] = int(arg)
         elif opt in ('--suffix'):
             kwargs['suffix'] = arg
 

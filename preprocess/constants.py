@@ -7,6 +7,7 @@ DESCS_LEN = {
     'hog': 96,
     'hof': 108,
     'hoghof': 96 + 108,
+    'mfcc': 39,
     'all': 96 + 108 + 192}
 NR_PCA_COMPONENTS = 64
 IP_TYPE = 'dense5.track15mbh'

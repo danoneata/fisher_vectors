@@ -52,6 +52,7 @@ def usage():
     print "         Suffix that is added to the default feature directory."
     print "         Default, no suffix."
 
+
 def compute_pca_given_dataset(src_cfg, **kwargs):
     """ Uses the conventions from the dataset for loading a subset of
     descriptors and choosing an output file.
