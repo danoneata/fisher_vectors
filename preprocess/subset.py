@@ -2,6 +2,7 @@ import os
 import numpy as np
 
 from constants import DESCS_LEN
+from constants import get_descs_len
 
 
 def load_subsample_descriptors(dataset):
@@ -25,12 +26,12 @@ def load_subsample_descriptors(dataset):
     elif os.path.exists(filename + '.dat'):
         # TODO Make a function that given the FEAT_TYPE returns the descriptor
         # length.
-        descs_len = DESCS_LEN[dataset.FTYPE.split('.')[-1]] + (
-            0 if 'mfcc' in dataset.FTYPE else 3)
+        dims = 0 if 'mfcc' in dataset.FTYPE else 3
+        descs_len = get_descs_len(dataset.FTYPE) + dims
         descriptors = np.fromfile(
             filename + '.dat', dtype=np.float32).reshape(-1, descs_len)
         # Discard temporal information.
-        descriptors = descriptors[:, 3:]
+        descriptors = descriptors[:, dims:]
     else:
         raise IOError
     return descriptors
