@@ -66,8 +66,9 @@ def rescale(input_video, max_width, **kwargs):
             input_video_info = get_video_infos(input_video)
             width, height = input_video_info['img_size']
             nr_frames = input_video_info['duration'] * input_video_info['fps']
-    except AssertionError:
-        if get_dimension:
+    except AssertionError, err:
+        print err
+        if get_dimensions:
             return 'bad_encoding', '', (-1, -1, -1)
         else:
             return 'bad_encoding', ''
