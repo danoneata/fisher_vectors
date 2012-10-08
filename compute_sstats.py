@@ -205,11 +205,18 @@ def compute_statistics(src_cfg, **kwargs):
     model_type = kwargs.get('model_type', 'fv')
     worker_type = kwargs.get('worker_type', 'normal')
 
+    outfilename = kwargs.get('outfilename', 'stats.tmp')
     if worker_type == 'normal':
         worker = compute_statistics_from_video_worker
+        outfilename = kwargs.get('outfilename', 'stats.tmp')
     elif worker_type == 'per_slice':
         from per_slice.compute_sstats_worker import compute_statistics_worker
         worker = compute_statistics_worker
+
+    if kwargs.has_key('spm'):
+        from spatial_pyramids import compute_statistics_worker
+        worker = compute_statistics_worker
+        outfilename = 'stats.tmp_spm%d%d%d' % kwargs.get('spm')
 
     fn_pca = os.path.join(dataset.FEAT_DIR, 'pca', 'pca_64.pkl')
     pca = kwargs.get('pca', load_pca(fn_pca))
@@ -219,8 +226,6 @@ def compute_statistics(src_cfg, **kwargs):
     descs_to_sstats = Model(model_type, gmm).descs_to_sstats
 
     nr_processes = kwargs.get('nr_processes', multiprocessing.cpu_count())
-
-    outfilename = kwargs.get('outfilename', 'stats.tmp')
 
     train_samples, train_labels = dataset.get_data('train')
     test_samples, test_labels = dataset.get_data('test')
@@ -410,6 +415,10 @@ def usage():
     print "         slices will be determined from the shots. The arguments"
     print "         `delta` and `spacing` will be ignored."
     print
+    print "     --spatial_pyramid=W_H_T"
+    print "         Use spatial-temporal pyramids. E.g., 1_3_1 for H3 or 1_1_2"
+    print "         for T2."
+    print
     # TODO
     print '     -g --grids=GRID'
     print '         Specify the type of spatial pyramids used. The argument'
@@ -442,7 +451,7 @@ def main():
             ["help", "dataset=", "ip_type=", "model=", "nr_clusters=",
              "nr_processes=", "delta=", "spacing=", "nr_frames_to_skip=",
              "out_filename=", "worker=", "suffix=", "rescale_videos=",
-             "shots_dir="])
+             "shots_dir=", "spatial_pyramid="])
     except getopt.GetoptError, err:
         print str(err)
         usage()
@@ -479,6 +488,8 @@ def main():
             kwargs['suffix'] = arg
         elif opt in ("--shots_dir"):
             kwargs['shots_dir'] = arg
+        elif opt in ("--spatial_pyramid"):
+            kwargs['spm'] = tuple([int(elem) for elem in arg.split('_')])
 
     compute_statistics(src_cfg, **kwargs)
 
