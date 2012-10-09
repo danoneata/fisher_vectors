@@ -132,7 +132,7 @@ def get_time_intervals(start, end, delta, spacing):
         end_frames = [end]
     else:
         begin_frames = np.array(range(start, end, delta * spacing))
-        end_frames = np.array(range(delta, end + delta, delta * spacing))
+        end_frames = np.array(range(start + delta, end + delta, delta * spacing))
         end_frames = np.minimum(end_frames, end)
     return begin_frames, end_frames
 
