@@ -297,6 +297,13 @@ def compute_statistics_from_video_worker(dataset, samples, labels, sstats_out,
     delta = kwargs.get('delta', 0)
     spacing = kwargs.get('spacing', 0)
     rescale_videos = kwargs.get('rescale_videos', 'none')
+    sample_limits_file = kwargs.get('sample_limits', None)
+
+    if sample_limits_file:
+        with open(sample_limits, 'r') as ff:
+            sample_limits = cPickle.load(ff)
+    else:
+        sample_limits = None
 
     D = gmm.d
     K = dataset.VOC_SIZE
@@ -320,8 +327,12 @@ def compute_statistics_from_video_worker(dataset, samples, labels, sstats_out,
                 #sstats_out.remove(str(sample))
                 continue
 
-        begin_frames, end_frames = get_time_intervals(
-            sample.bf, sample.ef, delta, spacing)
+        if sample_limits:
+            begin_frames = sample_limits[sample]['begin_frames']
+            end_frames = sample_limits[sample]['end_frames']
+        else:
+            begin_frames, end_frames = get_time_intervals(
+                sample.bf, sample.ef, delta, spacing)
 
         N = 0  # Count the number of descriptors for this sample.
         sstats = np.zeros(K + 2 * K * D, dtype=np.float32)
@@ -410,10 +421,17 @@ def usage():
     print "             - 'large': 500 <= width <= 1000"
     print "             - 'none': original size of the videos."
     print
-    print "     --shots_dir=DIR"
-    print "         If `shots_dir` is specified, in the `per_slice` case, the"
-    print "         slices will be determined from the shots. The arguments"
-    print "         `delta` and `spacing` will be ignored."
+    print "     --per_shot"
+    print "         In the `per_slice` case, the slices will be determined"
+    print "         from the shots. The arguments `delta` and `spacing` will"
+    print "         be ignored."
+    print
+    print "     --sample_limits=FILE"
+    print "         Computes descriptors for the begin and end frames"
+    print "         specified by the `sample_limits` file. The file should"
+    print "         contain a dict object of the following format"
+    print "         dict = {'sample': {'begin_frames': [1, 100],"
+    print "             'end_frames': [10], [110]}}"
     print
     print "     --spatial_pyramid=W_H_T"
     print "         Use spatial-temporal pyramids. E.g., 1_3_1 for H3 or 1_1_2"
@@ -451,7 +469,7 @@ def main():
             ["help", "dataset=", "ip_type=", "model=", "nr_clusters=",
              "nr_processes=", "delta=", "spacing=", "nr_frames_to_skip=",
              "out_filename=", "worker=", "suffix=", "rescale_videos=",
-             "shots_dir=", "spatial_pyramid="])
+             "per_shot", "sample_limits=", "spatial_pyramid="])
     except getopt.GetoptError, err:
         print str(err)
         usage()
@@ -486,8 +504,10 @@ def main():
             kwargs['rescale_videos'] = arg
         elif opt in ("--suffix"):
             kwargs['suffix'] = arg
-        elif opt in ("--shots_dir"):
-            kwargs['shots_dir'] = arg
+        elif opt in ("--per_shot"):
+            kwargs['per_shot'] = True
+        elif opt in ("--sample_limits"):
+            kwargs['sample_limits'] = arg
         elif opt in ("--spatial_pyramid"):
             kwargs['spm'] = tuple([int(elem) for elem in arg.split('_')])
 

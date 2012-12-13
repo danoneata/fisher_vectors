@@ -12,28 +12,6 @@ from fisher_vectors.constants import MAX_WIDTH
 from fisher_vectors.utils.video import rescale
 
 
-def get_slices_from_shots(shot_dir, filename):
-    """ Returns begin and end frames corresponding to the shots in the video.
-
-    I assume the format used by Matthijs: zip files with the shots data in the
-    <movie>_shot.txt file.
-
-    """
-    ext = '.zip'
-    shots_zip = os.path.join(shot_dir, filename + ext)
-    unzip = subprocess.Popen(
-        ['unzip', '-p', shots_zip, '*shot.txt'],
-        stdout=subprocess.PIPE)
-
-    begin_frames, end_frames = [], []
-    for line in unzip.stdout.readlines():
-        begin_frame, end_frame = line.split()
-        begin_frames.append(int(begin_frame) + 1)
-        end_frames.append(int(end_frame) + 1)
-    return begin_frames, end_frames
-
-
-
 def compute_statistics_worker(dataset, samples, labels, sstats_out,
                               descs_to_sstats, pca, gmm, **kwargs):
     """ Computes the Fisher vectors for each slice that results from the
@@ -45,7 +23,14 @@ def compute_statistics_worker(dataset, samples, labels, sstats_out,
     delta = kwargs.get('delta', 120)
     spacing = kwargs.get('spacing', 1)
     rescale_videos = kwargs.get('rescale_videos', 'none')
-    shots_dir = kwargs.get('shots_dir', None)
+    per_shot = kwargs.get('per_shot', False)
+    sample_limits_file = kwargs.get('sample_limits', None)
+
+    if sample_limits_file:
+        with open(sample_limits, 'r') as ff:
+            sample_limits = cPickle.load(ff)
+    else:
+        sample_limits = None
 
     D = gmm.d
     K = dataset.VOC_SIZE
@@ -71,9 +56,11 @@ def compute_statistics_worker(dataset, samples, labels, sstats_out,
                 print 'Bad encoding ' + sample.movie
                 continue
 
-        if shots_dir:
-            begin_frames, end_frames = get_slices_from_shots(
-                shots_dir, sample.movie)
+        if per_shot:
+            begin_frames, end_frames = dataset.get_shots(sample.movie)
+        elif sample_limits:
+            begin_frames = sample_limits[sample]['begin_frames']
+            end_frames = sample_limits[sample]['end_frames']
         else:
             begin_frames, end_frames = get_time_intervals(
                 sample.bf, sample.ef, delta, spacing)
@@ -85,7 +72,8 @@ def compute_statistics_worker(dataset, samples, labels, sstats_out,
                           dtype=np.float32)
 
         for chunk in read_descriptors_from_video(
-            infile, nr_descriptors=1, nr_skip_frames=nr_frames_to_skip):
+            infile, nr_descriptors=1, begin_frames=begin_frames,
+            end_frames=end_frames, nr_skip_frames=nr_frames_to_skip):
             xx = pca.transform(chunk[:, 3:])
 
             # Determine slice number based on time.
