@@ -1,3 +1,4 @@
+import cPickle
 from itertools import izip
 import numpy as np
 import os
@@ -6,6 +7,7 @@ import subprocess
 from fisher_vectors.compute_sstats import get_sample_label
 from fisher_vectors.compute_sstats import get_time_intervals
 from fisher_vectors.compute_sstats import get_slice_number
+from fisher_vectors.compute_sstats import parse_ip_type
 from fisher_vectors.compute_sstats import read_descriptors_from_video
 
 from fisher_vectors.constants import MAX_WIDTH
@@ -27,10 +29,12 @@ def compute_statistics_worker(dataset, samples, labels, sstats_out,
     sample_limits_file = kwargs.get('sample_limits', None)
 
     if sample_limits_file:
-        with open(sample_limits, 'r') as ff:
+        with open(sample_limits_file, 'r') as ff:
             sample_limits = cPickle.load(ff)
     else:
         sample_limits = None
+
+    track_len = parse_ip_type(dataset.FTYPE)
 
     D = gmm.d
     K = dataset.VOC_SIZE
@@ -77,7 +81,10 @@ def compute_statistics_worker(dataset, samples, labels, sstats_out,
             xx = pca.transform(chunk[:, 3:])
 
             # Determine slice number based on time.
-            ii = get_slice_number(chunk[:, 2], begin_frames, end_frames)
+            ii = get_slice_number(
+                # Get time stamp of the beginning of the track.
+                chunk[:, 2] - (nr_frames_to_skip + 1) * track_len,
+                begin_frames, end_frames)
             N[ii] += 1
 
             # Update corresponding sstats cell.
