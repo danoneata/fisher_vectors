@@ -7,7 +7,6 @@ import multiprocessing as mp
 from ipdb import set_trace
 
 from dataset import Dataset
-from fisher_vectors.features import DescriptorProcessor
 from fisher_vectors.evaluation import Evaluation
 from fisher_vectors.model import Model
 
@@ -15,53 +14,70 @@ ROOT_PATH = '/home/clear/oneata/data'
 RESULTS_FN = 'new_results.txt'
 
 
-def do(task, src_cfg, ip_type, model_type, K, grids, Ncpus, verbose):
-    dataset = Dataset(src_cfg, ip_type=ip_type)
-    model = Model(model_type, K, grids)
-    dp = DescriptorProcessor(dataset, model)
+def do(task, src_cfg, **kwargs):
+    ip_type = kwargs.get('ip_type', 'dense5.track15mbh')
+    suffix = kwargs.get('suffix', '')
+    nr_clusters = kwargs.get('nr_clusters')
+    dataset = Dataset(
+        src_cfg, ip_type=ip_type, suffix=suffix, nr_clusters=nr_clusters)
+
+    per_slice = kwargs.get('per_slice', False)
+
     # Select the task based on opt_type argument.
     if task == 'compute':
-        dp.compute_statistics(Ncpus)
+        pass
     elif task == 'check':
-        dp.check_tmp_statistics()
+        from fisher_vectors import data
+        data.check_given_dataset(dataset)
     elif task == 'merge':
-        dp.merge_statistics()
+        if per_slice:
+            from fisher_vectors.per_slice import features
+            class_idx = kwargs.get('class_idx')
+            features.merge_class_given_dataset(dataset, class_idx)
+        else:
+            from fisher_vectors import data
+            data.merge_given_dataset(dataset)
     elif task == 'remove':
-        dp.remove_statistics()
+        pass
     elif task == 'evaluate':
-        evaluation = Evaluation(dataset.DATASET)
-        model.fit(dataset, evaluation)
-        with open(os.path.join(
-            ROOT_PATH, dataset.DATASET, 'results', RESULTS_FN), 'a') as ff:
-            ff.write('%s %2.3f\n' % (str(model), 100 * model.score()))
+        from fisher_vectors.scripts.evaluate import evaluate_given_dataset
+        evaluate_given_dataset(dataset, **kwargs)
+        #with open(os.path.join(
+        #    ROOT_PATH, dataset.DATASET, 'results', RESULTS_FN), 'a') as ff:
+        #    ff.write('%s %2.3f\n' % (str(model), 100 * model.score()))
     else:
-        raise Exception("Option type is not defined.")
+        raise Exception("Task is not defined.")
         usage()
         sys.exit(1)
 
 
 def usage():
+    # TODO To be modified.
     prog_name = os.path.basename(sys.argv[0])
-    print 'Usage: %s opt_type -d dataset -i ip_type -m model \\' % prog_name
-    print '       -k K [-g grids] [-n ncpus]'
+    print 'Usage: %s -t opt_type -d dataset -k nr_clusters \\' % prog_name
     print
     print 'Launches different tasks for a given dataset and model.'
     print
     print 'Options:'
-    print '     -o, --opt_type=OPTION_TYPE'
+    print '     -t, --task=OPTION_TYPE'
     print '         Specify the task:'
-    print '             - "compute": computes statistics'
-    print '             - "check": prints missing temporary statistics'
-    print '             - "merge": merge statistics'
-    print '             - "remove": removes statistics'
-    print '             - "evaluate": evaluates the model.'
+    print '             "compute": computes statistics'
+    print '                 Parameters: '
+    print '             "check": prints missing temporary statistics'
+    print '             "merge": merge statistics.'
+    print '                 Parameters: per_slice, class_idx'
+    print '             "remove": removes statistics'
+    print '             "evaluate": evaluates the model.'
     print
-    print '     -d, --dataset=DATASET'
-    print '         Specify the dataset to be loaded (e.g., "kth" or '
-    print '         "hollywood2_clean)."'
+    print '     -d, --dataset=SRC_CFG'
+    print '         Specify the configuration name of the dataset to be'
+    print '         loaded (e.g., "kth").'
+    print
+    print '     -k, --nr_clusters=K'
+    print '         Specify the number of clusters used for the dictionary.'
     print
     print '     -i, --ip_type=IP_TYPE'
-    print '         Specify the type of descriptor (e.g., "harris.hoghof").'
+    print '         Specify the type of descriptor. Default, dense5.track15mbh'
     print
     print '     -m, --model=MODEL_TYPE'
     print '         Specify the type of the model. There are the following'
@@ -72,9 +88,7 @@ def usage():
     print '                Fisher vectors'
     print '             - "fv_sfv": combination of Fisher vectors and spatial'
     print '                Fisher vectors.'
-    print
-    print '     -k, --K=K'
-    print '         Specify the number of clusters used for the dictionary.'
+    print '         Default, "fv".'
     print
     print '     -g --grids=GRID'
     print '         Specify the type of spatial pyramids used. The argument'
@@ -88,9 +102,14 @@ def usage():
     print '         task; for the other tasks (computation, merging or'
     print '         removing) only the first grid is considered.'
     print
-    print '     -n, --ncpus=NCPUS'
+    print '     -n, --nr_processes=NCPUS'
     print '         Number of cores to run the operations on. By default, this'
     print '         is set to the number of nodes on the cluster.'
+    print
+    print '     --profile'
+    print '         Profiles the code using cProfile. If the number of CPUs is'
+    print '         set larger than 1, the profiling is done only at a'
+    print '         superficial level.'
     print
     print '     Other options: -h, --help and -v, --verbose (these do not'
     print '     require any argument).'
@@ -105,56 +124,47 @@ def usage():
 
 
 def main():
-    if len(sys.argv) == 1:
-        print usage()
-        sys.exit(1)
-
     try:
-        task = sys.argv[1]
-        if task not in ('compute', 'check', 'merge', 'remove', 'evaluate'):
-            print 'Unknown option.'
-            usage()
-            sys.exit(1)
-
         opt_pairs, _args = getopt.getopt(
-            sys.argv[2:], "hvd:i:m:k:g:n:",
-            ["help", "verbose", "dataset=", "ip_type=",
-             "model=", "K=", "grids=", "ncpus="])
+            sys.argv[1:], "hvt:d:i:m:k:",
+            ["help", "verbose", "task=", "dataset=", "ip_type=", "model=",
+             "nr_clusters=", "nr_processes=", "suffix=", "per_slice",
+             "class_idx=", "eval_type="])
     except getopt.GetoptError, err:
         print str(err)
         usage()
         sys.exit(1)
-    except IndexError:
-        print 'Not enough arguments.'
-        usage()
-        sys.exit(1)
 
-    verbose = False
-    Ncpus = mp.cpu_count()
-    grids = [(1, 1, 1)]
+    kwargs = {}
     for opt, arg in opt_pairs:
         if opt in ("-h", "--help"):
             usage()
             sys.exit()
         elif opt in ("-v", "--verbose"):
-            verbose = True
+            kwargs['verbose'] = True
+        elif opt in ("-t", "--task"):
+            task = arg
         elif opt in ("-d", "--dataset"):
             src_cfg = arg
         elif opt in ("-i", "--ip_type"):
-            ip_type = arg
+            kwargs['ip_type'] = arg
         elif opt in ("-m", "--model"):
-            model_type = arg
-        elif opt in ("-k", "--K"):
-            K = int(arg)
-        elif opt in ("-g", "--grids"):
-            gg = arg.split('-')
-            grids = []
-            for _g in gg:
-                gx, gy, gt = _g.split('_')
-                grids.append((int(gx), int(gy), int(gt)))
-        elif opt in ("-n", "--ncpus"):
-            Ncpus = min(max(int(arg), 1), Ncpus)
-    do(task, src_cfg, ip_type, model_type, K, grids, Ncpus, verbose)
+            kwargs['model_type'] = arg
+        elif opt in ("-k", "--nr_clusters"):
+            kwargs['nr_clusters'] = int(arg)
+        elif opt in ("--nr_processes"):
+            kwargs['nr_processes'] = int(arg)
+        elif opt in ("--suffix"):
+            kwargs['suffix'] = arg
+        elif opt in ("--per_slice"):
+            kwargs['per_slice'] = True
+        elif opt in ("--class_idx"):
+            kwargs['class_idx'] = int(arg)
+        elif opt in("--eval_type"):
+            kwargs['eval_type'] = arg
+
+    do(task, src_cfg, **kwargs)
+
 
 if __name__ == '__main__':
     main()
