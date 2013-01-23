@@ -1,4 +1,5 @@
 import cPickle
+from ipdb import set_trace
 from itertools import izip
 import numpy as np
 import os
@@ -34,7 +35,8 @@ def compute_statistics_worker(dataset, samples, labels, sstats_out,
     else:
         sample_limits = None
 
-    track_len = parse_ip_type(dataset.FTYPE)
+    _, track_len, _ = parse_ip_type(dataset.FTYPE)
+    track_len = (nr_frames_to_skip + 1) * int(track_len)
 
     D = gmm.d
     K = dataset.VOC_SIZE
@@ -83,8 +85,7 @@ def compute_statistics_worker(dataset, samples, labels, sstats_out,
             # Determine slice number based on time.
             ii = get_slice_number(
                 # Get time stamp of the beginning of the track.
-                chunk[:, 2] - (nr_frames_to_skip + 1) * track_len,
-                begin_frames, end_frames)
+                chunk[:, 2] - track_len + 1, begin_frames, end_frames)
             N[ii] += 1
 
             # Update corresponding sstats cell.
