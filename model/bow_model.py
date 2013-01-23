@@ -106,7 +106,7 @@ class BOWModel(BaseModel):
 
     def _kernelize_distances(self):
         self.Kxx = exp(- self.Kxx / mean(self.Kxx)) 
-        self.Kyx = exp(- self.Kyx / mean(self.Kyx)) 
+        self.Kyx = exp(- self.Kyx / mean(self.Kyx))  # Normalize by mean(Kxx) ?
 
     @classmethod
     def is_model_for(cls, type_model):

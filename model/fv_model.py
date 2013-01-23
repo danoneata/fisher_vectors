@@ -73,7 +73,7 @@ class FVModel(BaseModel):
         # Compute posterior probabilities using yael.
         Q_yael = fvec_new(N * K)
         gmm_compute_p(N, numpy_to_fvec_ref(xx), gmm, Q_yael, GMM_FLAGS_W)
-        Q = fvec_to_numpy(Q_yael, N * K).reshape(N, K)
+        Q = fvec_to_numpy(Q_yael, N * K).reshape(N, K)  # NxK
         yael.free(Q_yael)
         # Compute statistics.
         sstats = np.zeros(K + 2 * K * D, dtype=np.float32)

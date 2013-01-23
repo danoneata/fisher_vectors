@@ -35,7 +35,6 @@ def evaluate_given_dataset(dataset, **kwargs):
     Kxx, Kyx = model.get_kernels()
 
     evaluation = Evaluation(dataset.DATASET, **kwargs)
-    set_trace()
     print evaluation.fit(Kxx, tr_labels).score(Kyx, te_labels)
 
 
