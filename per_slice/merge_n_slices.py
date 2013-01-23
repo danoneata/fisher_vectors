@@ -157,7 +157,7 @@ def _aggregate(sstats, info, N):
     return agg_sstats, agg_info
     
 
-def master(src_cfg, K, N, nr_processes, double_norm):
+def master(src_cfg, suffix_in ,suffix_out, K, N, nr_processes, double_norm):
     D = 64
 
     dataset = Dataset(src_cfg, nr_clusters=K)
@@ -169,7 +169,7 @@ def master(src_cfg, K, N, nr_processes, double_norm):
         suffix = '.double_norm'
         gmm = load_gmm(
             os.path.join(
-                dataset.FEAT_DIR + '.per_slice.small.delta_60.skip_1', 'gmm',
+                dataset.FEAT_DIR + suffix_in, 'gmm',
                 'gmm_%d' % K))
     else:
         worker = merge
@@ -177,10 +177,10 @@ def master(src_cfg, K, N, nr_processes, double_norm):
         gmm = None
 
     path_in = os.path.join(
-        dataset.FEAT_DIR + '.per_slice.small.delta_60.skip_1',
+        dataset.FEAT_DIR + suffix_in,
         'statistics_k_%d' % dataset.VOC_SIZE, 'stats.tmp')
     path_out = os.path.join(
-        dataset.FEAT_DIR + '.small.skip_1',
+        dataset.FEAT_DIR + suffix_out,
         'statistics_k_%d' % dataset.VOC_SIZE, 'stats.tmp' + suffix)
 
     sstats_in = SstatsMap(path_in)
@@ -216,7 +216,7 @@ def main():
         opt_pairs, args = getopt.getopt(
             sys.argv[1:], "hd:n:k:",
             ["help", "dataset=", "nr_slices_to_merge=", "nr_clusters=",
-             "nr_processes=", "double_norm"])
+             "nr_processes=", "suffix_in=", "suffix_out=", "double_norm"])
     except getopt.GetoptError, err:
         print str(err)
         usage()
@@ -230,6 +230,10 @@ def main():
             sys.exit(1)
         elif opt in ("-d", "--dataset"):
             src_cfg = arg
+        elif opt in ("--suffix_in"):
+            suffix_in = arg
+        elif opt in ("--suffix_out"):
+            suffix_out = arg
         elif opt in ("-n", "--nr_slices_to_merge"):
             nr_slices_to_merge = int(arg)
         elif opt in ("-k", "--nr_clusters"):
@@ -238,7 +242,7 @@ def main():
             nr_processes = int(arg)
         elif opt in ("--double_norm"):
             double_norm = True
-    master(src_cfg, nr_clusters, nr_slices_to_merge, nr_processes, double_norm)
+    master(src_cfg, suffix_in, suffix_out, nr_clusters, nr_slices_to_merge, nr_processes, double_norm)
 
 
 if __name__ == '__main__':

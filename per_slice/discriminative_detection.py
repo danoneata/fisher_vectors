@@ -27,7 +27,7 @@ from fisher_vectors.preprocess.gmm import load_gmm
 
 
 CHUNK_SIZE = 300
-FILE = '/home/lear/oneata/tmp/train_per_video_class_%d_iteration_0.dat'
+FILE = '/home/lear/oneata/tmp/%s_train_per_video_class_%d_iteration_0.dat'
 RESULT_FILE = ('/home/lear/oneata/data/trecvid11/results/'
                'retrain_feature_pooling_with_background_info.txt')
 
@@ -224,23 +224,27 @@ class Model(object):
         return te_kernel
 
 
+class MySVC(svm.SVC):
+    def predict(self, X):
+        return self.decision_function(X)
+
+
 class Evaluation(object):
     def __init__(self):
         pass
 
     def fit(self, tr_kernel, tr_labels):
-        my_svm = svm.SVC(kernel='precomputed', probability=True,
-                         class_weight='auto')
+        my_svm = MySVC(kernel='precomputed', probability=True)
+        tuned_parameters = {
+            'C': np.power(3.0, np.arange(-2, 8)),
+            'class_weight': [{-1: 1, 1: 2 ** jj} for jj in xrange(10)]}
 
-        c_values = np.power(3.0, np.arange(-2, 8))
-        tuned_parameters = [{'C': c_values}]
-
-        splits = StratifiedShuffleSplit(tr_labels, 3, test_size=0.25,
-                                        random_state=0)
+        splits = StratifiedShuffleSplit(tr_labels, 5, test_size=0.25,
+                                        random_state=1)
 
         self.clf = GridSearchCV(
             my_svm, tuned_parameters, score_func=average_precision,
-            cv=splits, n_jobs=1)
+            cv=splits, n_jobs=8)
         self.clf.fit(tr_kernel, tr_labels)
         return self
 
@@ -255,9 +259,13 @@ class Evaluation(object):
 
 def discriminative_detection_per_class(class_idx, **kwargs):
     max_nr_iter = kwargs.get('max_nr_iter', 1)
-    dataset = kwargs.get('dataset', Dataset(
-        'trecvid11_small', nr_clusters=128, suffix='.small.per_slice'))
-    outfile = kwargs.get('outfile', FILE % class_idx)
+    #dataset = kwargs.get('dataset', Dataset(
+    #    'trecvid11_small', nr_clusters=128, suffix='.small.per_slice.delta_240'))
+        #'trecvid11_small', nr_clusters=128, suffix='.small.per_slice'))
+    src_cfg = kwargs.get('src_cfg')
+    nr_clusters = kwargs.get('nr_clusters')
+    suffix = kwargs.get('suffix')
+    outfile = kwargs.get('outfile', FILE % (src_cfg, class_idx))
     nr_pos = kwargs.get('nr_pos', 10000)
     nr_neg = kwargs.get('nr_neg', 10000)
     agg_type = kwargs.get('agg_type', 'norm')
@@ -265,6 +273,7 @@ def discriminative_detection_per_class(class_idx, **kwargs):
 
     assert agg_type in ('norm', 'unnorm'), "Unknown aggregation type."
 
+    dataset = Dataset(src_cfg, nr_clusters=nr_clusters, suffix=suffix)
     gmm = load_gmm(dataset.GMM)
     tr_slice_data = get_slice_data_from_file(
         dataset, 'train', class_idx, gmm, nr_pos, nr_neg)
@@ -325,17 +334,21 @@ def discriminative_detection(start_idx=0, end_idx=15, **kwargs):
         np.ceil(float(end_idx - start_idx) / nr_processes))
     processes = []
 
-    for ii in xrange(nr_processes):
-        ss = start_idx + ii * classes_per_process
-        ee = min(end_idx, start_idx + (ii + 1) * classes_per_process)
-        process = mp.Process(
-            target=discriminative_detection_worker, args=(ss, ee),
-            kwargs=kwargs)
-        processes.append(process)
-        process.start()
+    print start_idx, end_idx
+    if nr_processes > 1:
+        for ii in xrange(nr_processes):
+            ss = start_idx + ii * classes_per_process
+            ee = min(end_idx, start_idx + (ii + 1) * classes_per_process)
+            process = mp.Process(
+                target=discriminative_detection_worker, args=(ss, ee),
+                kwargs=kwargs)
+            processes.append(process)
+            process.start()
 
-    for process in processes:
-        process.join()
+        for process in processes:
+            process.join()
+    else:
+        discriminative_detection_worker(start_idx, end_idx, **kwargs)
 
 
 def discriminative_detection_worker(start_idx, end_idx, **kwargs):
@@ -349,9 +362,10 @@ def discriminative_detection_worker(start_idx, end_idx, **kwargs):
 def main():
     try:
         opt_pairs, _args = getopt.getopt(
-            sys.argv[1:], "hs:e:",
-            ["help", "start_idx=", "end_idx=", "use_nr_descs", "agg_type=",
-             "nr_pos=", "nr_neg=", "nr_processes="])
+            sys.argv[1:], "hs:e:d:k:",
+            ["help", "start_idx=", "end_idx=", "dataset=", "nr_clusters=",
+             "suffix=", "use_nr_descs", "agg_type=", "nr_pos=", "nr_neg=",
+             "nr_processes="])
     except getopt.GetoptError, err:
         print str(err)
         usage()
@@ -366,6 +380,12 @@ def main():
             start_idx = int(arg)
         elif opt in ("-e", "--end_idx"):
             end_idx = int(arg)
+        elif opt in ("-d", "--dataset"):
+            kwargs['src_cfg'] = arg
+        elif opt in ("-k", "--nr_clusters"):
+            kwargs['nr_clusters'] = int(arg)
+        elif opt in ("--suffix"):
+            kwargs['suffix'] = arg
         elif opt in ("--use_nr_descs"):
             kwargs['use_nr_descs'] = True
         elif opt in ("--agg_type"):
