@@ -10,6 +10,11 @@ from .base_evaluation import BaseEvaluation
 from utils import average_precision
 
 
+class MySVC(svm.SVC):
+    def predict(self, X):
+        return self.decision_function(X)
+
+
 class Hollywood2Evaluation(BaseEvaluation):
     """ Evaluation procedure for the Hollywood2 dataset. Fits a one-vs-rest
     classifier for each class.
@@ -41,14 +46,17 @@ class Hollywood2Evaluation(BaseEvaluation):
         for ii in xrange(self.nr_classes):
             labels = cx[:, ii]
 
-            # Better results with these weights: my_weights = {-1: 1, 1: 100}
-            my_svm = svm.SVC(kernel='precomputed', probability=True,
-                             class_weight='auto')
+            # Better results with these weights:
+            my_weights = {-1: 1, 1: 100}
+            my_svm = MySVC(kernel='precomputed', probability=True,
+                             class_weight=my_weights)  #'auto')
 
-            c_values = np.power(3.0, np.arange(-2, 8))
-            tuned_parameters = [{'C': c_values}]
+            #c_values = np.power(3.0, np.arange(-2, 8))
+            tuned_parameters = {
+                'C': np.power(3.0, np.arange(-2, 8)),}
+                #'class_weight': [{-1: 1, 1: 2 ** jj} for jj in xrange(10)]}
 
-            splits = StratifiedShuffleSplit(labels, 1, test_size=0.25)
+            splits = StratifiedShuffleSplit(labels, 5, test_size=0.25, random_state=1)
             self.clf.append(
                 GridSearchCV(my_svm, tuned_parameters,
                              score_func=average_precision,
@@ -60,12 +68,16 @@ class Hollywood2Evaluation(BaseEvaluation):
         """ Returns the mean average precision score. """
         cy = self.lb.transform(cy)
         average_precisions = np.zeros(self.nr_classes)
+        preds = []
         for ii in xrange(self.nr_classes):
             true_labels = cy[:, ii]
             predicted_values = self.clf[ii].predict_proba(Kyx)[:, 1]
+            preds.append(predicted_values)
             average_precisions[ii] = average_precision(
                 true_labels, predicted_values)
-        return np.mean(average_precisions) * 100
+        #return np.mean(average_precisions) * 100
+        #return preds
+        return average_precisions
 
     @classmethod
     def is_evaluation_for(cls, dataset_to_evaluate):
