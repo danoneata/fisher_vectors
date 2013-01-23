@@ -146,14 +146,16 @@ class SstatsMap(object):
             elif self.getsize(filename) == 0:
                 status = False
                 incorrect_files.append(filename + self.data_ext)
+            else:
+                continue  # Comment this line for a more detailed check.
+                data = self.read(filename)
+                nr_elems = len(data)
+                if (nr_elems == 0 or
+                    nr_elems % len_sstats != 0 or
+                    np.isnan(np.max(data))):
+                    status = False
+                    incorrect_files.append(filename + self.data_ext)
             #try:
-            #    data = self.read(filename)
-            #    nr_elems = len(data)
-            #    if (nr_elems == 0 or
-            #        nr_elems % len_sstats != 0 or
-            #        np.isnan(np.max(data))):
-            #        status = False
-            #        incorrect_files.append(filename + self.data_ext)
             #except IOError:
             #    status = False
             #    missing_files.append(filename + self.data_ext)
@@ -350,10 +352,14 @@ def merge_given_dataset(dataset, **kwargs):
 
 def check_given_dataset(dataset, **kwargs):
     """ Checks the train and the test samples. """
-    basepath = os.path.join(dataset.SSTATS_DIR, 'stats.tmp')
+    if kwargs.has_key('spm'):
+        spm_suffix = '_spm%d%d%d' % kwargs.get('spm')
+    else:
+        spm_suffix = ''
+    basepath = os.path.join(dataset.SSTATS_DIR, 'stats.tmp%s' % spm_suffix)
     data = SstatsMap(basepath)
     nr_clusters = dataset.VOC_SIZE
-
+    
     tr_samples = dataset.get_data('train')[0]
     str_tr_samples = list(set([str(sample) for sample in tr_samples]))
     tr_status = data.check(str_tr_samples, nr_clusters +
@@ -400,6 +406,9 @@ def usage():
     print '     --incorrect'
     print '         When checking the sufficient statistics, prints only those'
     print '         statistics that are incorrect, contain NaNs.'
+    print
+    print '     --spatial_pyramid=W_H_T'
+    print '         Number of bins per each dimension.'
 
 
 def main():
@@ -407,7 +416,8 @@ def main():
         opt_pairs, args = getopt.getopt(
             sys.argv[1:], "hd:k:t:o:",
             ["help", "dataset=", "nr_clusters=", "task=", "out_folder=",
-             "suffix=", "missing", "incorrect", "aggregate"])
+             "suffix=", "missing", "incorrect", "aggregate",
+             "spatial_pyramid="])
     except getopt.GetoptError, err:
         print str(err)
         usage()
@@ -437,6 +447,8 @@ def main():
             kwargs["print_incorrect"] = True
         elif opt in ("--aggregate"):
             kwargs["aggregate"] = True
+        elif opt in ("--spatial_pyramid"):
+            kwargs["spm"] = tuple([int(ii) for ii in arg.split('_')])
 
     if task not in ("check", "merge"):
         print "Unknown task."
@@ -448,7 +460,12 @@ def main():
     if task == "check":
         check_given_dataset(dataset, **kwargs)
     elif task == "merge":
-        merge_given_dataset(dataset, **kwargs)
+        if kwargs.has_key("spm"):
+            from fisher_vectors.spatial_pyramids import merge_given_dataset \
+                    as _merge_given_dataset
+            _merge_given_dataset(dataset, **kwargs)
+        else:
+            merge_given_dataset(dataset, **kwargs)
 
 
 if __name__ == '__main__':
