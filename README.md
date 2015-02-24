@@ -4,6 +4,7 @@ Fisher vectors
 A brief description of the pipeline.
 
 The main stages are the following:
+
 1. Extract descriptors from videos.
 2. Convert the descriptors in the so-called sufficient statistics.
 3. Convert the sufficient statistics to Fisher vectors or soft-counts.
