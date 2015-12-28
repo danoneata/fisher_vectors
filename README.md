@@ -1,3 +1,5 @@
+**Note:** This code is not maintained anymore. For an updated version, please check [this](https://bitbucket.org/doneata/fv4a) repository.
+
 Fisher vectors
 ==============
 
