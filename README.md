@@ -1,4 +1,6 @@
-**Note:** This code is not maintained anymore. For an updated version, please check [this](https://bitbucket.org/doneata/fv4a) repository.
+**Notes:**
+- This code is not maintained anymore. For an updated version, please check [this](https://bitbucket.org/doneata/fv4a) repository.
+- If you are looking for a clean, sklearn-based implementation of just the Fisher vectors encoding, please check [this](https://gist.github.com/danoneata/9927923) gist.
 
 Fisher vectors
 ==============
